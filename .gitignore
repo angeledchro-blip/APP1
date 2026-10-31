@@ -1,0 +1,15 @@
+# Web (Cloudflare)
+web/node_modules/
+web/.wrangler/
+web/.dev.vars
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+*.iml
+
+# Sistema
+.DS_Store

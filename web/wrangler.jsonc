@@ -1,0 +1,28 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "practica",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  // La base de datos se crea sola en el primer deploy (aprovisionamiento automático de Cloudflare).
+  "d1_databases": [
+    {
+      "binding": "DB"
+    }
+  ],
+  // IA gratis de Cloudflare para revisar dibujos cuando no hay ANTHROPIC_API_KEY.
+  "ai": {
+    "binding": "AI"
+  },
+  // Identificador de cada deploy: la app lo usa para recargarse sola cuando hay versión nueva.
+  "version_metadata": {
+    "binding": "CF_VERSION_METADATA"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#1f2128" />
+    <title>Práctica</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;600;700&family=Big+Shoulders+Display:wght@600;800&display=swap"
+    />
+    <link rel="stylesheet" href="/css/app.css" />
+    <link rel="icon" href="/icono.svg" type="image/svg+xml" />
+    <script type="module" src="/js/app.js"></script>
+  </head>
+  <body>
+    <header class="cabecera">
+      <h1>Práctica</h1>
+      <span id="estado" class="estado" data-tipo="">Conectando…</span>
+    </header>
+
+    <p id="mensaje" class="mensaje" hidden title="Toca para ver completo"></p>
+
+    <main>
+      <!-- ============ GUITARRA ============ -->
+      <section id="vista-guitarra" class="vista" aria-label="Guitarra">
+        <div class="mic">
+          <button id="mic" class="primario" aria-pressed="false">
+            <span id="mic-texto">Activar micrófono</span>
+            <span id="medidor" class="medidor" aria-hidden="true"></span>
+          </button>
+          <p id="mic-estado" class="mic-estado" hidden></p>
+        </div>
+
+        <div class="segmentos" role="tablist" aria-label="Modo de práctica">
+          <button role="tab" data-sub="afinador" aria-selected="true">Afinador</button>
+          <button role="tab" data-sub="notas" aria-selected="false">Notas</button>
+          <button role="tab" data-sub="acordes" aria-selected="false">Acordes</button>
+        </div>
+
+        <!-- Afinador -->
+        <div id="sub-afinador" class="subvista">
+          <div class="lectura">
+            <span id="af-nota" class="nota-grande">–</span>
+            <span id="af-solfeo" class="solfeo"></span>
+          </div>
+          <p id="af-objetivo" class="objetivo">Toca una cuerda al aire</p>
+          <canvas id="af-cuerda" class="cuerda-viva" aria-hidden="true"></canvas>
+          <p id="af-cents" class="cents"></p>
+          <p id="af-indicacion" class="indicacion" aria-live="polite"></p>
+          <div class="selector-cuerdas" role="group" aria-label="Cuerda a afinar">
+            <button data-cuerda="auto" aria-pressed="true">Auto</button>
+            <button data-cuerda="6" aria-pressed="false">6ª<small>E</small></button>
+            <button data-cuerda="5" aria-pressed="false">5ª<small>A</small></button>
+            <button data-cuerda="4" aria-pressed="false">4ª<small>D</small></button>
+            <button data-cuerda="3" aria-pressed="false">3ª<small>G</small></button>
+            <button data-cuerda="2" aria-pressed="false">2ª<small>B</small></button>
+            <button data-cuerda="1" aria-pressed="false">1ª<small>E</small></button>
+          </div>
+        </div>
+
+        <!-- Notas -->
+        <div id="sub-notas" class="subvista" hidden>
+          <select id="no-leccion" class="selector" aria-label="Lección"></select>
+          <p id="no-desc" class="descripcion"></p>
+          <div class="objetivo-nota">
+            <div class="lectura lectura-media">
+              <span id="no-letra" class="nota-grande">–</span>
+              <span id="no-solfeo" class="solfeo"></span>
+            </div>
+            <p class="donde"><span id="no-donde"></span> <span id="no-progreso" class="progreso"></span></p>
+          </div>
+          <p id="no-retro" class="retro" data-tipo="" aria-live="polite"></p>
+          <div id="no-mastil" class="mastil"></div>
+          <div class="acciones">
+            <button id="no-saltar">Saltar nota</button>
+            <button id="no-reiniciar">Empezar de nuevo</button>
+          </div>
+        </div>
+
+        <!-- Acordes -->
+        <div id="sub-acordes" class="subvista" hidden>
+          <select id="ac-rutina" class="selector" aria-label="Qué practicar"></select>
+          <p id="ac-desc" class="descripcion"></p>
+          <div id="ac-practica">
+            <div class="acorde-actual">
+              <div class="acorde-cabeza">
+                <span id="ac-nombre" class="nombre-acorde">–</span>
+                <span id="ac-paso" class="progreso"></span>
+                <span id="ac-sigue" class="sigue"></span>
+              </div>
+              <div id="ac-diagrama" class="diagrama-caja"></div>
+            </div>
+            <p id="ac-retro" class="retro" data-tipo="" aria-live="polite"></p>
+            <div id="ac-croma" class="croma" aria-hidden="true"></div>
+            <div class="acciones">
+              <button id="ac-anterior">Anterior</button>
+              <button id="ac-siguiente">Siguiente</button>
+              <button id="ac-reiniciar">Reiniciar</button>
+            </div>
+          </div>
+          <div id="ac-biblioteca" class="biblioteca" hidden></div>
+        </div>
+      </section>
+
+      <!-- ============ DIBUJO ============ -->
+      <section id="vista-dibujo" class="vista" aria-label="Dibujo" hidden>
+        <label class="campo">
+          <span>Ejercicio</span>
+          <select id="di-ejercicio"></select>
+        </label>
+        <article class="ejercicio">
+          <h2 id="di-titulo"></h2>
+          <p id="di-objetivo" class="objetivo-ej"></p>
+          <p id="di-instrucciones"></p>
+          <p class="criterios"><strong>En qué me voy a fijar:</strong> <span id="di-criterios"></span></p>
+          <p id="di-minutos" class="minutos"></p>
+        </article>
+
+        <div class="camara">
+          <video id="di-video" playsinline muted autoplay hidden></video>
+          <img id="di-foto" alt="Foto de tu dibujo" hidden />
+          <p id="di-vacio" class="camara-vacia">
+            Cuando termines el ejercicio, abre la cámara y toma la foto de la hoja completa: de frente, con buena luz y sin sombra encima.
+          </p>
+          <p id="di-cargando" class="cargando" hidden>Revisando tu dibujo…</p>
+        </div>
+
+        <label id="di-nota-campo" class="campo" hidden>
+          <span>¿Algo en específico que quieras que revise? (opcional)</span>
+          <textarea id="di-nota" rows="2" maxlength="500"></textarea>
+        </label>
+
+        <div class="acciones">
+          <button id="di-abrir" class="primario">Abrir cámara</button>
+          <button id="di-tomar" class="primario" hidden>Tomar foto</button>
+          <button id="di-revisar" class="primario" hidden>Revisar mi dibujo</button>
+          <button id="di-otra" hidden>Tomar otra</button>
+          <button id="di-cerrar" hidden>Cerrar cámara</button>
+        </div>
+
+        <div id="di-resultado" class="resultado" aria-live="polite" hidden></div>
+      </section>
+    </main>
+
+    <nav class="pestanas" role="tablist" aria-label="Secciones">
+      <button role="tab" data-vista="dibujo" aria-selected="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1.2-4.4L15.6 5.2a2 2 0 0 1 2.8 0l.4.4a2 2 0 0 1 0 2.8L8.4 18.8 4 20z" /><path d="M13.8 7l3.2 3.2" /></svg>
+        Dibujo
+      </button>
+      <button role="tab" data-vista="guitarra" aria-selected="true">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c4.4 0 7 2.2 7 5.3 0 4.6-4.2 10.4-7 12.7-2.8-2.3-7-8.1-7-12.7C5 5.2 7.6 3 12 3z" /></svg>
+        Guitarra
+      </button>
+    </nav>
+
+    <div id="toast" class="toast" role="status" hidden></div>
+  </body>
+</html>
