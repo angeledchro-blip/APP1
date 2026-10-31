@@ -1,23 +1,34 @@
-// Vista de dibujo: cámara en vivo con consejos en tiempo real y revisión completa.
+// Vista de dibujo: ruta de ejercicios, sesión guiada con cámara en vivo y revisión que aprueba el ejercicio.
+import { progreso } from './progreso.js';
+import { voz } from './voz.js';
+
 const $ = (sel) => document.querySelector(sel);
 const LADO_MAX = 1600; // revisión completa
-const LADO_VIVO = 960; // vistazos en vivo (más ligeros)
-const UMBRAL_CAMBIO = 3; // diferencia mínima (0-255) para mandar un vistazo nuevo
+const LADO_VIVO = 768; // vistazos en vivo (ligeros para que respondan rápido)
+const UMBRAL_CAMBIO = 2.5; // diferencia mínima (0-255) para mandar un vistazo nuevo
 
 let ejercicios = [];
 let actual = null;
+let elegidoAMano = false;
+let aprobar = 3;
 let stream = null;
 let foto = null;
 let revisando = false;
 
 const vivo = {
   activo: false,
-  intervalo: 20,
-  faltan: 20,
+  intervalo: 10,
   enviando: false,
   timer: null,
   firma: null,
+  ultimoEnvio: 0,
   consejos: [],
+};
+
+const sesion = {
+  activa: false,
+  fin: 0,
+  inicio: 0,
 };
 
 export const dibujo = {
@@ -26,7 +37,8 @@ export const dibujo = {
   pausar,
   ocupado: () => Boolean(stream) || revisando || vivo.enviando,
   configurar: (c) => {
-    vivo.intervalo = Number(c?.intervaloVivo) || 20;
+    vivo.intervalo = Number(c?.intervaloVivo) || 10;
+    aprobar = Number(c?.aprobarDibujo) || 3;
   },
 };
 
@@ -38,26 +50,94 @@ function pausar() {
 }
 
 function iniciar() {
-  $('#di-ejercicio').addEventListener('change', (e) => elegir(e.target.value));
-  $('#di-abrir').addEventListener('click', abrirCamara);
-  $('#di-tomar').addEventListener('click', tomarFoto);
-  $('#di-otra').addEventListener('click', abrirCamara);
+  $('#di-ejercicio').addEventListener('change', (e) => {
+    elegidoAMano = true;
+    elegir(e.target.value);
+  });
+  $('#di-abrir').addEventListener('click', empezarSesion);
+  $('#di-tomar').addEventListener('click', () => tomarFoto(true));
+  $('#di-otra').addEventListener('click', empezarSesion);
   $('#di-pausar').addEventListener('click', alternarVivo);
+  $('#di-voz').addEventListener('click', () => {
+    voz.alternar();
+    pintarVoz();
+  });
   $('#di-cerrar').addEventListener('click', () => {
     cerrarCamara();
     $('#di-resultado').hidden = true;
     estado('inicial');
   });
   $('#di-revisar').addEventListener('click', revisar);
+  $('#di-siguiente').addEventListener('click', () => {
+    const sig = ejercicioActual();
+    if (sig) {
+      elegidoAMano = false;
+      elegir(sig.id);
+      $('#di-resultado').hidden = true;
+      estado('inicial');
+      $('#vista-dibujo').scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }
+  });
+  progreso.alCambiar(() => pintarRuta());
+  pintarVoz();
   estado('inicial');
 }
 
 function actualizar(lista) {
   ejercicios = lista;
-  const sel = $('#di-ejercicio');
   const previo = actual?.id;
-  sel.innerHTML = lista.map((e) => `<option value="${esc(e.id)}">${esc(e.titulo)}</option>`).join('');
-  elegir(lista.some((e) => e.id === previo) ? previo : lista[0]?.id);
+  pintarRuta();
+  const destino = elegidoAMano && lista.some((e) => e.id === previo) ? previo : ejercicioActual()?.id ?? lista[0]?.id;
+  elegir(destino);
+}
+
+// ---------------------------------------------------------------- ruta de ejercicios
+
+function calificacion(id) {
+  return progreso.numero(`dibujo:${id}`, 0);
+}
+
+function aprobado(id) {
+  return calificacion(id) >= aprobar;
+}
+
+// El ejercicio que toca: el primero que aún no apruebas
+function ejercicioActual() {
+  return ejercicios.find((e) => !aprobado(e.id)) || null;
+}
+
+function estadoDe(e) {
+  if (aprobado(e.id)) return 'aprobado';
+  return e === ejercicioActual() ? 'actual' : 'bloqueado';
+}
+
+function pintarRuta() {
+  const sel = $('#di-ejercicio');
+  if (!ejercicios.length) return;
+  const valor = sel.value;
+  sel.innerHTML = ejercicios
+    .map((e, i) => {
+      const est = estadoDe(e);
+      const marca = est === 'aprobado' ? `✓ ` : est === 'actual' ? '▶ ' : '🔒 ';
+      return `<option value="${esc(e.id)}">${marca}${i + 1}. ${esc(e.titulo)}</option>`;
+    })
+    .join('');
+  if (valor) sel.value = valor;
+  const hechos = ejercicios.filter((e) => aprobado(e.id)).length;
+  $('#di-avance').textContent = `Llevas ${hechos} de ${ejercicios.length} ejercicios aprobados.`;
+  if (actual) pintarEstado();
+}
+
+function pintarEstado() {
+  const est = estadoDe(actual);
+  const el = $('#di-estado-ej');
+  el.dataset.estado = est;
+  if (est === 'aprobado') el.textContent = `✓ Aprobado con ${calificacion(actual.id)}/5. Puedes repetirlo cuando quieras.`;
+  else if (est === 'actual') el.textContent = `▶ Este es tu ejercicio de ahora. Se aprueba con ${aprobar}/5 o más en la revisión.`;
+  else {
+    const toca = ejercicioActual();
+    el.textContent = `🔒 Te recomiendo primero aprobar "${toca ? toca.titulo : ''}". Puedes intentarlo, pero cuesta más.`;
+  }
 }
 
 function elegir(id) {
@@ -69,16 +149,17 @@ function elegir(id) {
   $('#di-objetivo').textContent = actual.objetivo;
   $('#di-instrucciones').textContent = actual.instrucciones;
   $('#di-criterios').textContent = actual.criterios;
-  $('#di-minutos').textContent = `Tiempo sugerido: ${actual.minutos} min`;
+  $('#di-minutos').textContent = `Sesión: ${actual.minutos} min`;
+  pintarEstado();
   if (cambio) {
     vivo.consejos = [];
     pintarHistorial();
   }
 }
 
-// ---------------------------------------------------------------- cámara
+// ---------------------------------------------------------------- sesión con cámara
 
-async function abrirCamara() {
+async function empezarSesion() {
   foto = null;
   $('#di-resultado').hidden = true;
   try {
@@ -92,7 +173,11 @@ async function abrirCamara() {
     await v.play().catch(() => {});
     estado('camara');
     $('.camara').scrollIntoView({ block: 'start', behavior: 'smooth' });
+    sesion.activa = true;
+    sesion.inicio = Date.now();
+    sesion.fin = sesion.inicio + (Number(actual?.minutos) || 10) * 60000;
     iniciarVivo();
+    voz.hablar(`Empezamos: ${actual?.titulo || 'dibujo libre'}. Tienes ${actual?.minutos || 10} minutos. Te voy diciendo cómo vas.`);
   } catch (err) {
     stream = null;
     const msg =
@@ -106,6 +191,7 @@ async function abrirCamara() {
 
 function cerrarCamara() {
   detenerVivo();
+  sesion.activa = false;
   stream?.getTracks().forEach((t) => t.stop());
   stream = null;
   const v = $('#di-video');
@@ -125,12 +211,12 @@ function capturar(ladoMax, calidad) {
   return { canvas, url: canvas.toDataURL('image/jpeg', calidad) };
 }
 
-// ---------------------------------------------------------------- en vivo
+// ---------------------------------------------------------------- consejos en vivo
 
 function iniciarVivo() {
   vivo.activo = true;
   vivo.firma = null;
-  vivo.faltan = 4; // primer vistazo rápido
+  vivo.ultimoEnvio = Date.now() - (vivo.intervalo - 5) * 1000; // primer vistazo a los ~5 s
   $('#di-vivo').hidden = false;
   if (!vivo.consejos.length) $('#di-vivo-texto').textContent = 'Empieza a dibujar; en unos segundos te digo cómo vas.';
   clearInterval(vivo.timer);
@@ -142,56 +228,75 @@ function detenerVivo() {
   vivo.activo = false;
   clearInterval(vivo.timer);
   vivo.timer = null;
+  voz.callar();
 }
 
 function alternarVivo() {
   if (vivo.activo) {
-    detenerVivo();
+    vivo.activo = false;
     pintarVivo();
   } else if (stream) {
-    iniciarVivo();
+    vivo.activo = true;
+    vivo.ultimoEnvio = 0;
+    pintarVivo();
   }
 }
 
+function reloj(ms) {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
 function pintarVivo() {
-  $('#di-pausar').textContent = vivo.activo ? 'Pausar en vivo' : 'Reanudar en vivo';
+  $('#di-pausar').textContent = vivo.activo ? 'Pausar consejos' : 'Reanudar consejos';
   const e = $('#di-vivo-estado');
-  if (!vivo.activo) e.textContent = 'En pausa';
-  else if (vivo.enviando) e.textContent = 'Viendo tu hoja…';
-  else e.textContent = `En vivo · próximo vistazo en ${vivo.faltan} s`;
+  const resta = sesion.activa ? ` · quedan ${reloj(sesion.fin - Date.now())}` : '';
+  if (!vivo.activo) e.textContent = `Consejos en pausa${resta}`;
+  else if (vivo.enviando) e.textContent = `Viendo tu hoja…${resta}`;
+  else e.textContent = `En vivo${resta}`;
   e.dataset.activo = String(vivo.activo);
 }
 
 async function tic() {
-  if (!vivo.activo || !stream) return;
-  if (vivo.enviando) return pintarVivo();
-  vivo.faltan--;
-  if (vivo.faltan > 0) return pintarVivo();
-  vivo.faltan = vivo.intervalo;
-
-  const cap = capturar(LADO_VIVO, 0.75);
-  if (!cap) return pintarVivo();
-  const firma = firmaImagen(cap.canvas);
-  if (vivo.firma && diferencia(firma, vivo.firma) < UMBRAL_CAMBIO) {
-    $('#di-vivo-estado').textContent = 'Sin cambios en la hoja';
+  if (!stream) return;
+  // Se acabó el tiempo de la sesión: revisión completa automática
+  if (sesion.activa && Date.now() >= sesion.fin && !vivo.enviando) {
+    sesion.activa = false;
+    voz.hablar('Se acabó el tiempo. Vamos a revisar tu dibujo.');
+    tomarFoto(true);
     return;
   }
+  pintarVivo();
+  if (!vivo.activo || vivo.enviando) return;
+  if (Date.now() - vivo.ultimoEnvio < vivo.intervalo * 1000) return;
+
+  const cap = capturar(LADO_VIVO, 0.7);
+  if (!cap) return;
+  const firma = firmaImagen(cap.canvas);
+  if (vivo.firma && diferencia(firma, vivo.firma) < UMBRAL_CAMBIO) return; // nada nuevo en la hoja: espera
   vivo.enviando = true;
+  vivo.ultimoEnvio = Date.now();
   pintarVivo();
   try {
     const r = await fetch('/api/dibujo/vivo', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ imagen: cap.url, ejercicio: actual?.id ?? null, previos: vivo.consejos.slice(-4) }),
+      body: JSON.stringify({
+        imagen: cap.url,
+        ejercicio: actual?.id ?? null,
+        previos: vivo.consejos.slice(-4),
+        minuto: (Date.now() - sesion.inicio) / 60000,
+      }),
     });
     const datos = await r.json().catch(() => ({}));
     if (!r.ok) {
       $('#di-vivo-texto').textContent = datos.error || `El servidor respondió ${r.status}.`;
-      if (r.status === 429) detenerVivo();
-    } else {
+      if (r.status === 429) vivo.activo = false;
+    } else if (stream) {
       vivo.firma = firma;
       vivo.consejos.push(datos.consejo);
       $('#di-vivo-texto').textContent = datos.consejo;
+      voz.hablar(datos.consejo);
       pintarHistorial();
     }
   } catch {
@@ -228,15 +333,23 @@ function pintarHistorial() {
   ol.hidden = lista.length < 2;
 }
 
+function pintarVoz() {
+  const b = $('#di-voz');
+  b.textContent = voz.activa() ? '🔊 Voz: sí' : '🔇 Voz: no';
+  b.setAttribute('aria-pressed', String(voz.activa()));
+  b.hidden = !voz.disponible();
+}
+
 // ---------------------------------------------------------------- revisión completa
 
-function tomarFoto() {
+function tomarFoto(revisarYa) {
   const cap = capturar(LADO_MAX, 0.85);
   if (!cap) return;
   foto = cap.url;
   cerrarCamara();
   $('#di-foto').src = foto;
   estado('foto');
+  if (revisarYa) revisar();
 }
 
 async function revisar() {
@@ -251,7 +364,23 @@ async function revisar() {
     });
     const datos = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(datos.error || `El servidor respondió ${r.status}.`);
-    $('#di-resultado').innerHTML = formatear(datos.comentario);
+    let encabezado = '';
+    if (datos.nivel !== null && datos.nivel !== undefined) {
+      if (datos.aprobado) {
+        progreso.cargar({ [`dibujo:${actual.id}`]: String(Math.max(datos.nivel, calificacion(actual.id))) });
+        const sig = ejercicioActual();
+        encabezado = `<p class="calificacion aprobado">✓ ¡Aprobado con ${datos.nivel}/5!${sig ? ` Ya puedes pasar a "${esc(sig.titulo)}".` : ' Terminaste toda la ruta.'}</p>`;
+        voz.hablar(`¡Aprobado con ${datos.nivel} de 5!`);
+        $('#di-siguiente').hidden = !sig || sig.id === actual.id;
+      } else {
+        encabezado = `<p class="calificacion">Sacaste ${datos.nivel}/5. Para aprobar necesitas ${aprobar}. Practica lo que te marco y vuelve a intentarlo.</p>`;
+        voz.hablar(`Sacaste ${datos.nivel} de 5. Vamos otra vez.`);
+        $('#di-siguiente').hidden = true;
+      }
+    } else {
+      $('#di-siguiente').hidden = true;
+    }
+    $('#di-resultado').innerHTML = encabezado + formatear(datos.comentario);
     $('#di-resultado').hidden = false;
     $('#di-nota').value = '';
     estado('resultado');
@@ -284,7 +413,9 @@ function estado(e) {
   ver('#di-otra', e === 'foto' || e === 'resultado');
   ver('#di-nota-campo', e === 'foto');
   ver('#di-cargando', e === 'revisando');
+  if (e !== 'resultado') $('#di-siguiente').hidden = true;
   if (e === 'camara' || e === 'revisando') $('#di-resultado').hidden = true;
+  if (voz.disponible()) $('#di-voz').hidden = !(e === 'camara' || e === 'inicial');
 }
 
 // Texto de la IA → HTML seguro (negritas, listas y párrafos)

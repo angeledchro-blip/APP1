@@ -10,10 +10,12 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.speech.tts.TextToSpeech
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowManager
+import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
@@ -22,6 +24,7 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import java.util.Locale
 
 /**
  * La app es un "cascarón": abre la web de Cloudflare y le presta la cámara y el micrófono.
@@ -32,6 +35,8 @@ class MainActivity : Activity() {
 
     private lateinit var web: WebView
     private var permisoPendiente: PermissionRequest? = null
+    private var voz: TextToSpeech? = null
+    private var vozLista = false
     private val hostWeb: String? by lazy { Uri.parse(BuildConfig.WEB_URL).host }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -77,6 +82,18 @@ class MainActivity : Activity() {
             }
         }
 
+        // Voz del teléfono para leer en voz alta los consejos de dibujo (la web la usa como window.AndroidVoz)
+        voz = TextToSpeech(this) { estado ->
+            if (estado == TextToSpeech.SUCCESS) {
+                val r = voz?.setLanguage(Locale.forLanguageTag("es-MX"))
+                if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) {
+                    voz?.setLanguage(Locale.forLanguageTag("es"))
+                }
+                vozLista = true
+            }
+        }
+        web.addJavascriptInterface(PuenteVoz(), "AndroidVoz")
+
         web.webChromeClient = object : WebChromeClient() {
             override fun onPermissionRequest(request: PermissionRequest) {
                 runOnUiThread { pedirPermisos(request) }
@@ -117,6 +134,18 @@ class MainActivity : Activity() {
             permiso != null && checkSelfPermission(permiso) == PackageManager.PERMISSION_GRANTED
         }
         if (concedidos.isEmpty()) request.deny() else request.grant(concedidos.toTypedArray())
+    }
+
+    inner class PuenteVoz {
+        @JavascriptInterface
+        fun hablar(texto: String) {
+            if (vozLista) voz?.speak(texto.take(400), TextToSpeech.QUEUE_FLUSH, null, "practica")
+        }
+
+        @JavascriptInterface
+        fun callar() {
+            voz?.stop()
+        }
     }
 
     private fun permisoAndroid(recurso: String): String? = when (recurso) {
@@ -182,6 +211,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        voz?.shutdown()
         web.destroy()
         super.onDestroy()
     }

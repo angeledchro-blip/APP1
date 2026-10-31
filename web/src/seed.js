@@ -4,7 +4,7 @@
 //   2) Editar este archivo y subir SEED_VERSION: al siguiente deploy se actualizan las filas con el mismo id.
 // Las filas que se agregan directo en D1 no se borran al resembrar.
 
-export const SEED_VERSION = 3;
+export const SEED_VERSION = 4;
 
 export const ESQUEMA = [
   `CREATE TABLE IF NOT EXISTS config (
@@ -62,20 +62,39 @@ export const ESQUEMA = [
      fecha TEXT PRIMARY KEY,
      n INTEGER NOT NULL DEFAULT 0
    )`,
+  `CREATE TABLE IF NOT EXISTS niveles (
+     id TEXT PRIMARY KEY,
+     orden INTEGER NOT NULL,
+     titulo TEXT NOT NULL,
+     descripcion TEXT NOT NULL,
+     acordes TEXT NOT NULL DEFAULT '',   -- acordes que se desbloquean en este nivel
+     practica TEXT NOT NULL DEFAULT '',  -- qué practicar: rutina:<id> o acorde:<id>
+     reto_tipo TEXT NOT NULL,            -- repite | cambios | ritmo
+     reto_param TEXT NOT NULL DEFAULT '',
+     reto_meta INTEGER NOT NULL DEFAULT 0,
+     activo INTEGER NOT NULL DEFAULT 1
+   )`,
+  `CREATE TABLE IF NOT EXISTS progreso (
+     clave TEXT PRIMARY KEY,
+     valor TEXT NOT NULL,
+     fecha TEXT NOT NULL
+   )`,
 ];
 
 // Valores de config. Al resembrar NO se pisan los que ya existen (para no borrar cambios hechos en vivo).
 export const CONFIG = {
   // Mensaje de arriba en cada sección
   mensaje_guitarra:
-    'Para arrancar: afina la guitarra y luego 10 minutos de la rutina Em ↔ Am. Cuando ya te salga, prueba el juego "Cambios de 1 minuto".',
+    'Empieza en Camino: cada nivel te enseña acordes nuevos y los desbloqueas pasando su reto. Primero afina la guitarra.',
   mensaje_dibujo:
-    'Para arrancar: 10 minutos de "Líneas rectas desde el hombro". Abre la cámara y apunta a tu hoja: te voy corrigiendo en vivo.',
+    'Ve en orden: cada ejercicio se aprueba con 3/5 o más en la revisión y desbloquea el siguiente. Dale Empezar sesión y te corrijo en vivo.',
+  // Calificación mínima (de 5) para aprobar un ejercicio de dibujo
+  aprobar_dibujo: '3',
   limite_revisiones_dia: '40',
   modelo_claude: 'claude-sonnet-5-5',
   modelo_workers_ai: '@cf/meta/llama-4-scout-17b-16e-instruct',
   // Cámara en vivo: cada cuántos segundos mira la hoja, modelo y límite diario
-  intervalo_vivo_seg: '20',
+  intervalo_vivo_seg: '10',
   modelo_claude_vivo: 'claude-haiku-5-5',
   limite_vivo_dia: '400',
 };
@@ -139,6 +158,11 @@ export const EJERCICIOS = [
     'Llena una hoja con elipses de distintos tamaños, desde casi círculos hasta muy delgadas. Da 2 o 3 vueltas en cada una, moviendo el brazo desde el hombro.',
     'Que las elipses sean lisas y simétricas (sin picos ni partes planas) y que las vueltas queden juntas.',
     10, 1],
+  ['contorno-ciego', 'Contorno a ciegas',
+    'Entrenar la observación (no el parecido).',
+    'Mira tu mano y dibuja su contorno durante 2 minutos SIN ver el papel, despacio, siguiendo cada arruga con la vista. Después haz otro viendo el papel solo de vez en cuando.',
+    'Que la línea sea continua y que se note que observaste detalles. No se espera que se parezca.',
+    10, 1],
   ['valores', 'Escala de valores',
     'Controlar qué tan claro u oscuro sombreas.',
     'Dibuja una fila de 5 cuadros. Deja el primero blanco y el último lo más oscuro que puedas; llena los de en medio con tonos intermedios usando achurado (líneas paralelas juntas). Luego repite la fila sombreando con la presión del lápiz.',
@@ -149,11 +173,6 @@ export const EJERCICIOS = [
     'Traza una línea de horizonte con un punto de fuga en medio. Dibuja de 6 a 10 cajas: unas arriba, otras abajo y a los lados del horizonte. Las líneas de profundidad de todas las cajas van hacia el punto de fuga.',
     'Que las líneas de profundidad lleguen al punto de fuga, que las verticales sean verticales y las horizontales horizontales.',
     15, 2],
-  ['cajas-2-puntos', 'Cajas en perspectiva de dos puntos',
-    'Dibujar cajas vistas desde una esquina.',
-    'Traza el horizonte y pon dos puntos de fuga muy separados (hasta las orillas de la hoja). Dibuja de 5 a 8 cajas; cada lado de la caja va a su punto de fuga.',
-    'Que cada juego de líneas vaya a su punto de fuga, que las cajas no se vean deformadas y que las verticales sean paralelas.',
-    20, 2],
   ['cilindros', 'Cilindros',
     'Construir objetos redondos con elipses alineadas.',
     'Dibuja un eje (una línea recta) y una elipse en cada punta, atravesadas por el eje. Une las elipses con dos líneas. Haz cilindros parados, acostados e inclinados.',
@@ -164,16 +183,16 @@ export const EJERCICIOS = [
     'Dibuja un círculo y decide de dónde viene la luz. Sombrea la esfera: parte iluminada, sombra propia, luz reflejada en la orilla de abajo y la sombra que proyecta en el piso.',
     'Que la luz venga de un solo lado de forma consistente, que el paso de claro a oscuro sea suave y que la sombra proyectada esté del lado contrario a la luz.',
     20, 2],
+  ['cajas-2-puntos', 'Cajas en perspectiva de dos puntos',
+    'Dibujar cajas vistas desde una esquina.',
+    'Traza el horizonte y pon dos puntos de fuga muy separados (hasta las orillas de la hoja). Dibuja de 5 a 8 cajas; cada lado de la caja va a su punto de fuga.',
+    'Que cada juego de líneas vaya a su punto de fuga, que las cajas no se vean deformadas y que las verticales sean paralelas.',
+    20, 2],
   ['objeto-formas', 'Un objeto con formas básicas',
     'Dibujar algo real construyéndolo con cajas y cilindros.',
     'Pon una taza, un vaso o una botella frente a ti. Primero constrúyela con formas básicas (cilindros, cajas, elipses) con líneas suaves y luego remarca el contorno final.',
     'Las proporciones del objeto, que la construcción se note y que las elipses de arriba y abajo sean correctas.',
     20, 2],
-  ['contorno-ciego', 'Contorno a ciegas',
-    'Entrenar la observación (no el parecido).',
-    'Mira tu mano y dibuja su contorno durante 2 minutos SIN ver el papel, despacio, siguiendo cada arruga con la vista. Después haz otro viendo el papel solo de vez en cuando.',
-    'Que la línea sea continua y que se note que observaste detalles. No se espera que se parezca.',
-    10, 1],
   ['gesto', 'Gestos de figura humana',
     'Capturar el movimiento de una pose rápido.',
     'Busca fotos de personas en poses (deportes, baile). Haz dibujos de 30 a 60 segundos: primero una línea de acción que siga la curva del cuerpo y luego las formas principales encima.',
@@ -184,4 +203,39 @@ export const EJERCICIOS = [
     'Dibuja un óvalo con una línea vertical al centro. Los ojos van a la mitad de la altura de la cabeza; la nariz a la mitad entre ojos y barbilla; la boca a un tercio entre nariz y barbilla.',
     'Que las proporciones estén bien ubicadas, que la cara sea simétrica y que se usen líneas guía.',
     20, 3],
+];
+
+// Camino de guitarra: cada nivel desbloquea acordes y se pasa con un reto.
+// reto repite: tocar el acorde limpio N veces · cambios: N cambios en 1 minuto · ritmo: rutina a N BPM con 80% a tiempo
+export const NIVELES = [
+  ['n1', 'Tu primer acorde: Em',
+    'Em es el acorde más fácil: solo dos dedos en el traste 2. Pon los dedos con la punta, rasguea las 6 cuerdas y revisa que todas suenen limpias.',
+    'Em', 'acorde:Em', 'repite', 'Em', 5],
+  ['n2', 'Am y tu primer cambio',
+    'Am usa los mismos dedos 2 y 3 que Em, pero una cuerda más abajo, más el dedo 1 en el traste 1. Mueve los dos dedos juntos, como una sola pieza.',
+    'Am', 'rutina:em-am', 'cambios', 'Em,Am', 10],
+  ['n3', 'E: Em con un dedo más',
+    'E es igual a Em, solo agrega el dedo 1 en la 3ª cuerda, traste 1. Practica pasar de E a Am: es la misma forma movida una cuerda.',
+    'E', 'acorde:E', 'cambios', 'E,Am', 10],
+  ['n4', 'A y D',
+    'A: tres dedos juntitos en el traste 2. D: forma de triángulo en las 3 cuerdas más delgadas; no toques la 6ª ni la 5ª.',
+    'A,D', 'rutina:a-d', 'cambios', 'A,D', 10],
+  ['n5', 'G y C',
+    'Los acordes más usados en canciones. Estiran más la mano: tómate tu tiempo y cuida que no se apaguen cuerdas.',
+    'G,C', 'rutina:g-c', 'cambios', 'G,C', 8],
+  ['n6', 'Tu primera progresión',
+    'G, D, Em y C: con estos cuatro tocas cientos de canciones. Ahora con metrónomo, despacio.',
+    '', 'rutina:g-d-em-c', 'ritmo', 'g-d-em-c', 60],
+  ['n7', 'Dm y un Fa fácil',
+    'Dm se parece a D. Fmaj7 es un Fa sin cejilla que suena bonito y te prepara para el Fa completo.',
+    'Dm,Fmaj7', 'rutina:am-f-c-g', 'ritmo', 'am-f-c-g', 60],
+  ['n8', 'Acordes de séptima',
+    'A7, D7, E7, G7 y C7: los acordes de las rancheras y el blues.',
+    'A7,D7,E7,G7,C7', 'rutina:ranchera-d', 'ritmo', 'ranchera-d', 70],
+  ['n9', 'Blues en A',
+    'Los 12 compases del blues con séptimas. Aquí ya se siente que tocas en serio.',
+    '', 'rutina:blues-a', 'ritmo', 'blues-a', 70],
+  ['n10', 'Cejillas: F y Bm',
+    'El jefe final: el dedo 1 aplasta varias cuerdas a la vez. Es normal que tarde semanas en sonar limpio; no te desesperes.',
+    'F,Bm', 'rutina:cejillas', 'cambios', 'C,F', 6],
 ];

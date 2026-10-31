@@ -1,4 +1,4 @@
-import { SEED_VERSION, ESQUEMA, CONFIG, ACORDES, RUTINAS, LECCIONES, EJERCICIOS } from './seed.js';
+import { SEED_VERSION, ESQUEMA, CONFIG, ACORDES, RUTINAS, LECCIONES, EJERCICIOS, NIVELES } from './seed.js';
 
 const MAX_IMAGEN_BYTES = 6 * 1024 * 1024;
 const TIPOS_IMAGEN = ['image/jpeg', 'image/png', 'image/webp'];
@@ -19,6 +19,9 @@ export default {
       }
       if (url.pathname === '/api/dibujo/vivo' && request.method === 'POST') {
         return await vistazoEnVivo(request, env);
+      }
+      if (url.pathname === '/api/progreso' && request.method === 'POST') {
+        return await guardarProgreso(request, env);
       }
       return json({ error: 'Ruta no encontrada.' }, 404);
     } catch (err) {
@@ -102,6 +105,19 @@ async function sembrar(env) {
         .bind(id, titulo, objetivo, instrucciones, criterios, minutos, nivel, i)
     );
   });
+  NIVELES.forEach(([id, titulo, descripcion, acordes, practica, retoTipo, retoParam, retoMeta], i) => {
+    st.push(
+      db
+        .prepare(
+          `INSERT INTO niveles (id, orden, titulo, descripcion, acordes, practica, reto_tipo, reto_param, reto_meta)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET orden = excluded.orden, titulo = excluded.titulo, descripcion = excluded.descripcion,
+             acordes = excluded.acordes, practica = excluded.practica, reto_tipo = excluded.reto_tipo,
+             reto_param = excluded.reto_param, reto_meta = excluded.reto_meta`
+        )
+        .bind(id, i + 1, titulo, descripcion, acordes, practica, retoTipo, retoParam, retoMeta)
+    );
+  });
   st.push(
     db
       .prepare(
@@ -122,7 +138,7 @@ async function leerConfig(env) {
 // ---------- API: contenido ----------
 
 async function contenido(env) {
-  const [config, acordes, rutinas, lecciones, ejercicios] = await Promise.all([
+  const [config, acordes, rutinas, lecciones, ejercicios, niveles, progreso] = await Promise.all([
     leerConfig(env),
     env.DB.prepare('SELECT id, nombre, trastes, dedos, cejilla, nivel FROM acordes WHERE activo = 1 ORDER BY orden, nombre').all(),
     env.DB.prepare('SELECT id, titulo, descripcion, secuencia, nivel FROM rutinas WHERE activo = 1 ORDER BY orden, titulo').all(),
@@ -130,7 +146,13 @@ async function contenido(env) {
     env.DB.prepare(
       'SELECT id, titulo, objetivo, instrucciones, criterios, minutos, nivel FROM ejercicios WHERE activo = 1 ORDER BY orden, titulo'
     ).all(),
+    env.DB.prepare(
+      'SELECT id, titulo, descripcion, acordes, practica, reto_tipo, reto_param, reto_meta FROM niveles WHERE activo = 1 ORDER BY orden'
+    ).all(),
+    env.DB.prepare('SELECT clave, valor FROM progreso').all(),
   ]);
+  const prog = {};
+  for (const r of progreso.results) prog[r.clave] = r.valor;
   return json(
     {
       build: env.CF_VERSION_METADATA?.id || null,
@@ -140,7 +162,10 @@ async function contenido(env) {
           guitarra: config.mensaje_guitarra || '',
           dibujo: config.mensaje_dibujo || '',
         },
-        intervaloVivo: Math.max(8, Number(config.intervalo_vivo_seg || 20)),
+        intervaloVivo: Math.max(6, Number(config.intervalo_vivo_seg || 10)),
+        aprobarDibujo: Number(config.aprobar_dibujo || 3),
+        niveles: niveles.results,
+        progreso: prog,
         acordes: acordes.results,
         rutinas: rutinas.results,
         lecciones: lecciones.results,
@@ -210,7 +235,47 @@ async function revisarDibujo(request, env) {
     .bind(ejercicioId, new Date().toISOString(), resultado.motor, nota, resultado.texto)
     .run();
 
-  return json({ comentario: resultado.texto, motor: resultado.motor });
+  // Calificación que da la IA ("Nivel en este ejercicio: X/5") → aprueba el ejercicio si llega al mínimo
+  const nivel = leerCalificacion(resultado.texto);
+  const minimo = Number(config.aprobar_dibujo || 3);
+  let aprobado = false;
+  if (ejercicio && nivel !== null && nivel >= minimo) {
+    aprobado = true;
+    await env.DB.prepare(
+      `INSERT INTO progreso (clave, valor, fecha) VALUES (?, ?, ?)
+       ON CONFLICT(clave) DO UPDATE SET valor = MAX(CAST(progreso.valor AS INTEGER), CAST(excluded.valor AS INTEGER)), fecha = excluded.fecha`
+    )
+      .bind(`dibujo:${ejercicio.id}`, String(nivel), new Date().toISOString())
+      .run();
+  }
+  return json({ comentario: resultado.texto, motor: resultado.motor, nivel, aprobado });
+}
+
+function leerCalificacion(texto) {
+  const m = /nivel[^0-9\n]{0,40}?([0-5])\s*\/\s*5/i.exec(String(texto || ''));
+  return m ? Number(m[1]) : null;
+}
+
+// ---------- API: progreso ----------
+
+async function guardarProgreso(request, env) {
+  let cuerpo;
+  try {
+    cuerpo = await request.json();
+  } catch {
+    return json({ error: 'La petición no trae JSON válido.' }, 400);
+  }
+  const clave = typeof cuerpo?.clave === 'string' ? cuerpo.clave : '';
+  const valor = cuerpo?.valor === undefined || cuerpo?.valor === null ? '' : String(cuerpo.valor);
+  if (!/^[a-z0-9_:\-]{1,80}$/i.test(clave) || clave.startsWith('dibujo:') || valor.length > 200) {
+    return json({ error: 'Dato de progreso inválido.' }, 400);
+  }
+  await env.DB.prepare(
+    'INSERT INTO progreso (clave, valor, fecha) VALUES (?, ?, ?) ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor, fecha = excluded.fecha'
+  )
+    .bind(clave, valor, new Date().toISOString())
+    .run();
+  return json({ ok: true });
 }
 
 function parsearImagen(valor) {
@@ -238,7 +303,14 @@ Cómo respondes:
 **Tu siguiente práctica**
 (un ejercicio concreto: qué dibujar, cuántas veces o cuántos minutos y en qué fijarte)
 
-**Nivel en este ejercicio:** X/5`;
+**Nivel en este ejercicio:** X/5
+
+Cómo calificar (Sky es principiante; la calificación decide si pasa al siguiente ejercicio de su ruta):
+- Califica contra el objetivo de ESTE ejercicio, no contra un artista profesional.
+- 1/5: casi no se intentó o no sigue las instrucciones. 2/5: lo intenta, pero falla lo principal del ejercicio.
+- 3/5: cumple lo básico del objetivo aunque tenga errores; ya puede pasar al siguiente.
+- 4/5: lo cumple bien con detalles menores. 5/5: muy limpio y constante en toda la hoja.
+- Si la foto no deja ver el dibujo, no califiques: escribe "Nivel en este ejercicio: sin calificar" y pide otra foto.`;
 
 function armarPeticion(ejercicio, nota, historial) {
   const partes = [];
@@ -337,7 +409,7 @@ async function revisarConWorkersAI(env, config, imagen, texto, sistema, maxToken
 // ---------- API: cámara en vivo ----------
 
 const SISTEMA_VIVO = `Eres el maestro de dibujo de Sky y estás viendo EN VIVO, por la cámara de su celular, cómo dibuja en papel.
-Le das UN solo consejo inmediato sobre lo que ves en este momento: cómo va el trazo, la proporción, la presión, la postura de la mano o lo que siga del ejercicio.
+Sky es principiante: le das UN solo consejo inmediato sobre lo que ves en este momento, empezando por lo más básico del ejercicio (cómo va el trazo, la proporción, la presión, la postura de la mano o qué sigue en las instrucciones). Si lo está haciendo bien, díselo para que agarre confianza.
 Reglas:
 - Español de México, tono de compa que sabe dibujar, sin groserías.
 - Máximo 2 frases cortas, directo, nada de saludos ni formato.
@@ -366,11 +438,18 @@ async function vistazoEnVivo(request, env) {
 
   const ejercicio =
     typeof cuerpo.ejercicio === 'string'
-      ? await env.DB.prepare('SELECT titulo, objetivo, criterios FROM ejercicios WHERE id = ?').bind(cuerpo.ejercicio).first()
+      ? await env.DB.prepare('SELECT titulo, objetivo, instrucciones, criterios FROM ejercicios WHERE id = ?').bind(cuerpo.ejercicio).first()
       : null;
   const previos = Array.isArray(cuerpo.previos) ? cuerpo.previos.filter((x) => typeof x === 'string').slice(-4) : [];
   const partes = [];
-  if (ejercicio) partes.push(`Está haciendo el ejercicio "${ejercicio.titulo}": ${ejercicio.objetivo} Fíjate en: ${ejercicio.criterios}`);
+  if (ejercicio) {
+    partes.push(
+      `Está haciendo el ejercicio "${ejercicio.titulo}": ${ejercicio.objetivo}`,
+      `Instrucciones: ${ejercicio.instrucciones}`,
+      `Fíjate en: ${ejercicio.criterios}`
+    );
+  }
+  if (typeof cuerpo.minuto === 'number') partes.push(`Lleva ${Math.round(cuerpo.minuto)} minuto(s) de sesión.`);
   else partes.push('Está dibujando libre.');
   if (previos.length) partes.push('Consejos que ya le diste (no los repitas):\n- ' + previos.map((p) => p.slice(0, 300)).join('\n- '));
   partes.push('¿Qué le dices ahorita?');
@@ -380,7 +459,7 @@ async function vistazoEnVivo(request, env) {
   try {
     r = env.ANTHROPIC_API_KEY
       ? await revisarConClaude(env, imagen, texto, SISTEMA_VIVO, config.modelo_claude_vivo || 'claude-haiku-5-5', 1200)
-      : await revisarConWorkersAI(env, config, imagen, texto, SISTEMA_VIVO, 160);
+      : await revisarConWorkersAI(env, config, imagen, texto, SISTEMA_VIVO, 120);
   } catch (err) {
     console.error(err);
     return json({ error: 'La IA no pudo ver la imagen: ' + (err?.message || String(err)) }, 502);

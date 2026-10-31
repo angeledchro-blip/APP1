@@ -35,14 +35,36 @@
         </div>
 
         <div class="segmentos" role="tablist" aria-label="Modo de práctica">
-          <button role="tab" data-sub="afinador" aria-selected="true">Afinador</button>
+          <button role="tab" data-sub="camino" aria-selected="true">Camino</button>
+          <button role="tab" data-sub="afinador" aria-selected="false">Afinador</button>
           <button role="tab" data-sub="notas" aria-selected="false">Notas</button>
           <button role="tab" data-sub="acordes" aria-selected="false">Acordes</button>
           <button role="tab" data-sub="juegos" aria-selected="false">Juegos</button>
         </div>
 
+        <!-- Camino -->
+        <div id="sub-camino" class="subvista">
+          <article id="ca-actual" class="nivel-tarjeta" data-estado="actual">
+            <p id="ca-num" class="nivel-num"></p>
+            <h2 id="ca-titulo"></h2>
+            <p id="ca-desc"></p>
+            <div id="ca-acordes" class="nivel-acordes"></div>
+            <div class="reto">
+              <strong>Reto para pasar</strong>
+              <p id="ca-reto-texto"></p>
+            </div>
+            <p id="ca-aviso" class="nivel-aviso"></p>
+            <div class="acciones">
+              <button id="ca-practicar">Practicar</button>
+              <button id="ca-reto" class="primario">Hacer el reto</button>
+            </div>
+          </article>
+          <h3 class="sub-titulo">Tu camino</h3>
+          <ol id="ca-lista" class="niveles"></ol>
+        </div>
+
         <!-- Afinador -->
-        <div id="sub-afinador" class="subvista">
+        <div id="sub-afinador" class="subvista" hidden>
           <div class="lectura lectura-media">
             <span id="af-nota" class="nota-grande">–</span>
             <span id="af-solfeo" class="solfeo"></span>
@@ -88,6 +110,7 @@
         <div id="sub-acordes" class="subvista" hidden>
           <select id="ac-rutina" class="selector" aria-label="Qué practicar"></select>
           <p id="ac-desc" class="descripcion"></p>
+          <p id="ac-aviso" class="nivel-aviso" hidden></p>
           <div id="ac-practica">
             <div class="acorde-actual">
               <div class="acorde-cabeza">
@@ -162,11 +185,13 @@
       <!-- ============ DIBUJO ============ -->
       <section id="vista-dibujo" class="vista" aria-label="Dibujo" hidden>
         <label class="campo">
-          <span>Ejercicio</span>
+          <span>Ruta de ejercicios</span>
           <select id="di-ejercicio"></select>
         </label>
+        <p id="di-avance" class="avance"></p>
         <article class="ejercicio">
           <h2 id="di-titulo"></h2>
+          <p id="di-estado-ej" class="estado-ej" data-estado=""></p>
           <p id="di-objetivo" class="objetivo-ej"></p>
           <p id="di-instrucciones"></p>
           <p class="criterios"><strong>En qué me voy a fijar:</strong> <span id="di-criterios"></span></p>
@@ -177,7 +202,7 @@
           <video id="di-video" playsinline muted autoplay hidden></video>
           <img id="di-foto" alt="Foto de tu dibujo" hidden />
           <p id="di-vacio" class="camara-vacia">
-            Abre la cámara y apunta a tu hoja mientras dibujas (recarga el cel en algo para que no se mueva). Te voy diciendo qué corregir en vivo.
+            Recarga el cel en algo para que la cámara apunte fija a tu hoja y dale Empezar sesión. Mientras dibujas te voy diciendo qué corregir, en pantalla y en voz alta; al final reviso tu hoja y te califico.
           </p>
           <div id="di-vivo" class="vivo" hidden>
             <span id="di-vivo-estado" class="vivo-estado"></span>
@@ -192,12 +217,14 @@
         </label>
 
         <div class="acciones">
-          <button id="di-abrir" class="primario">Abrir cámara</button>
-          <button id="di-pausar" hidden>Pausar en vivo</button>
-          <button id="di-tomar" class="primario" hidden>Revisión completa</button>
+          <button id="di-abrir" class="primario">Empezar sesión</button>
+          <button id="di-tomar" class="primario" hidden>Terminé: revisar</button>
+          <button id="di-pausar" hidden>Pausar consejos</button>
+          <button id="di-voz" aria-pressed="true" hidden>🔊 Voz: sí</button>
           <button id="di-revisar" class="primario" hidden>Revisar mi dibujo</button>
-          <button id="di-otra" hidden>Volver a la cámara</button>
-          <button id="di-cerrar" hidden>Cerrar cámara</button>
+          <button id="di-siguiente" class="primario" hidden>Siguiente ejercicio</button>
+          <button id="di-otra" hidden>Otra sesión</button>
+          <button id="di-cerrar" hidden>Cancelar sesión</button>
         </div>
 
         <ol id="di-historial" class="historial" hidden></ol>

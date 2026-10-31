@@ -168,12 +168,12 @@ test('cámara en vivo: da un consejo corto, no repite y respeta el límite', asy
     },
   };
   const c = await (await pedir(w, env, '/api/contenido')).json();
-  assert.equal(c.contenido.intervaloVivo, 20);
+  assert.equal(c.contenido.intervaloVivo, 10);
   const r = await pedir(w, env, '/api/dibujo/vivo', { imagen: IMAGEN, ejercicio: 'lineas-hombro', previos: ['Consejo viejo'] });
   const d = await r.json();
   assert.equal(r.status, 200, JSON.stringify(d));
   assert.equal(d.consejo, 'Suelta la muñeca y traza desde el hombro.');
-  assert.equal(recibido.max_tokens, 160);
+  assert.equal(recibido.max_tokens, 120);
   assert.match(recibido.messages[0].content, /EN VIVO/);
   const texto = recibido.messages[1].content.find((p) => p.type === 'text').text;
   assert.match(texto, /Consejo viejo/);
@@ -181,4 +181,44 @@ test('cámara en vivo: da un consejo corto, no repite y respeta el límite', asy
   env.DB._db.prepare("UPDATE config SET valor = '1' WHERE clave = 'limite_vivo_dia'").run();
   const r2 = await pedir(w, env, '/api/dibujo/vivo', { imagen: IMAGEN });
   assert.equal(r2.status, 429);
+});
+
+test('camino de guitarra y progreso: niveles en orden y se guarda el avance', async () => {
+  const w = await nuevoWorker();
+  const env = { DB: d1Falso() };
+  const d = await (await pedir(w, env, '/api/contenido')).json();
+  const niveles = d.contenido.niveles;
+  assert.equal(niveles[0].acordes, 'Em');
+  assert.equal(niveles[0].reto_tipo, 'repite');
+  assert.ok(niveles.at(-1).acordes.includes('Bm'), 'las cejillas van al final');
+  // todos los acordes del contenido se desbloquean en algún nivel
+  const enNiveles = new Set(niveles.flatMap((n) => n.acordes.split(',').filter(Boolean)));
+  for (const a of d.contenido.acordes) assert.ok(enNiveles.has(a.id), `falta ${a.id} en el camino`);
+  const r = await pedir(w, env, '/api/progreso', { clave: 'guitarra:nivel', valor: 3 });
+  assert.equal(r.status, 200);
+  const d2 = await (await pedir(w, env, '/api/contenido')).json();
+  assert.equal(d2.contenido.progreso['guitarra:nivel'], '3');
+  // no se puede marcar un dibujo como aprobado desde afuera
+  const r2 = await pedir(w, env, '/api/progreso', { clave: 'dibujo:elipses', valor: 5 });
+  assert.equal(r2.status, 400);
+});
+
+test('la revisión con 3/5 o más aprueba el ejercicio; con menos no', async () => {
+  const w = await nuevoWorker();
+  let respuesta = '**Lo que va bien**\n- Algo\n\n**Nivel en este ejercicio:** 2/5';
+  const env = { DB: d1Falso(), AI: { run: async () => ({ response: respuesta }) } };
+  let d = await (await pedir(w, env, '/api/dibujo/revisar', { imagen: IMAGEN, ejercicio: 'lineas-hombro' })).json();
+  assert.equal(d.nivel, 2);
+  assert.equal(d.aprobado, false);
+  respuesta = '**Nivel en este ejercicio:** 4/5';
+  d = await (await pedir(w, env, '/api/dibujo/revisar', { imagen: IMAGEN, ejercicio: 'lineas-hombro' })).json();
+  assert.equal(d.nivel, 4);
+  assert.equal(d.aprobado, true);
+  respuesta = 'Nivel en este ejercicio: 3/5';
+  await pedir(w, env, '/api/dibujo/revisar', { imagen: IMAGEN, ejercicio: 'lineas-hombro' });
+  const c = await (await pedir(w, env, '/api/contenido')).json();
+  assert.equal(c.contenido.progreso['dibujo:lineas-hombro'], '4', 'se queda la mejor calificación');
+  respuesta = 'No se ve la hoja. Nivel en este ejercicio: sin calificar';
+  d = await (await pedir(w, env, '/api/dibujo/revisar', { imagen: IMAGEN, ejercicio: 'elipses' })).json();
+  assert.equal(d.nivel, null);
 });

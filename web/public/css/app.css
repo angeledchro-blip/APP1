@@ -236,7 +236,7 @@ textarea {
 
 .segmentos {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   margin-top: 12px;
   padding: 4px;
   gap: 4px;
@@ -247,8 +247,8 @@ textarea {
 .segmentos button {
   border: 0;
   min-height: 44px;
-  padding: 0 4px;
-  font-size: 15px;
+  padding: 0 2px;
+  font-size: 14px;
   border-radius: 10px;
   color: var(--papel-2);
 }
@@ -637,6 +637,162 @@ textarea {
   line-height: 1;
 }
 
+/* ---------- Camino ---------- */
+
+.nivel-tarjeta {
+  margin-top: 14px;
+  padding: 16px;
+  border-radius: var(--r-panel);
+  background: var(--grafito-2);
+  border: 1.5px solid var(--lila);
+}
+
+.nivel-tarjeta[data-estado='pasado'] {
+  border-color: var(--menta);
+}
+
+.nivel-tarjeta[data-estado='bloqueado'] {
+  border-color: var(--grafito-3);
+}
+
+.nivel-num {
+  margin: 0;
+  font-size: 14px;
+  color: var(--lila);
+  font-weight: 600;
+}
+
+.nivel-tarjeta h2 {
+  margin: 4px 0 6px;
+  font-family: var(--f-display);
+  font-weight: 800;
+  font-size: 34px;
+  line-height: 1;
+}
+
+.nivel-tarjeta > p {
+  margin: 6px 0 0;
+}
+
+.nivel-acordes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.mini-acorde.fijo {
+  margin: 0;
+  width: 92px;
+  border: 1.5px solid var(--grafito-3);
+}
+
+.mini-acorde figcaption {
+  font-family: var(--f-display);
+  font-weight: 800;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.reto {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: var(--r-control);
+  background: var(--grafito);
+}
+
+.reto strong {
+  font-size: 13px;
+  color: var(--ambar);
+}
+
+.reto p {
+  margin: 4px 0 0;
+}
+
+.nivel-aviso {
+  margin: 10px 0 0;
+  font-size: 14px;
+  color: var(--papel-2);
+}
+
+.nivel-aviso:empty {
+  display: none;
+}
+
+.sub-titulo {
+  margin: 22px 0 8px;
+  font-family: var(--f-display);
+  font-weight: 800;
+  font-size: 24px;
+}
+
+.niveles {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.niveles li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--r-control);
+  cursor: pointer;
+}
+
+.niveles li[aria-current='true'] {
+  background: var(--grafito-2);
+}
+
+.niveles .marca {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 15px;
+  border: 1.5px solid var(--grafito-3);
+}
+
+.niveles li[data-estado='pasado'] .marca {
+  background: var(--menta);
+  border-color: var(--menta);
+  color: var(--grafito);
+}
+
+.niveles li[data-estado='actual'] .marca {
+  background: var(--lila);
+  border-color: var(--lila);
+  color: var(--lila-tinta);
+}
+
+.niveles li[data-estado='bloqueado'] {
+  opacity: 0.6;
+}
+
+.niveles .info {
+  display: grid;
+}
+
+.niveles .info small {
+  color: var(--papel-2);
+}
+
+.mini-acorde.bloqueado {
+  opacity: 0.55;
+}
+
+.mini-acorde small {
+  font-size: 11px;
+  color: var(--papel-2);
+}
+
 /* ---------- Juegos ---------- */
 
 .juegos-menu {
@@ -665,6 +821,17 @@ textarea {
 .juego-tarjeta span {
   color: var(--papel-2);
   font-size: 14px;
+}
+
+.juego-tarjeta:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.juego-tarjeta .candado {
+  font-style: normal;
+  font-size: 13px;
+  color: var(--ambar);
 }
 
 .juego-cabeza {
@@ -773,6 +940,40 @@ button.chico {
 
 #vista-dibujo .campo:first-child {
   margin-top: 16px;
+}
+
+.avance {
+  margin: 8px 0 0;
+  font-size: 14px;
+  color: var(--papel-2);
+}
+
+.estado-ej {
+  margin: 6px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--papel-2);
+}
+
+.estado-ej[data-estado='aprobado'] {
+  color: var(--menta);
+}
+
+.estado-ej[data-estado='actual'] {
+  color: var(--lila);
+}
+
+.calificacion {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--r-control);
+  background: var(--grafito);
+  font-weight: 700;
+  color: var(--ambar);
+}
+
+.calificacion.aprobado {
+  color: var(--menta);
 }
 
 .ejercicio h2 {

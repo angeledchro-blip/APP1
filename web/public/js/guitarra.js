@@ -5,10 +5,12 @@ import { CUERDAS, LETRAS, midiDeFrecuencia, nota, cuerda as datosCuerda, parsear
 import { evaluarAcorde, consejoAcorde, diagramaAcorde, clasesDeAcorde } from './acordes.js';
 import { mastil } from './mastil.js';
 import { juegos } from './juegos.js';
+import { camino } from './camino.js';
+import { progreso } from './progreso.js';
 
 const $ = (sel) => document.querySelector(sel);
 const motor = new MotorAudio();
-let sub = 'afinador';
+let sub = 'camino';
 
 export const guitarra = {
   iniciar,
@@ -25,9 +27,30 @@ function iniciar() {
   afinador.iniciar();
   notas.iniciar();
   acordes.iniciar();
-  juegos.iniciar({ motor, asegurarMic });
+  juegos.iniciar({ motor, asegurarMic, irA: cambiarSub });
+  camino.iniciar({
+    practicar: (practica) => {
+      const [tipo, id] = String(practica).split(':');
+      cambiarSub('acordes');
+      if (tipo === 'rutina') acordes.elegir(id);
+      else acordes.practicarUno(id);
+    },
+    reto: (nivel, num) => {
+      cambiarSub('juegos');
+      juegos.lanzarReto(nivel, num, async () => {
+        await camino.subirNivel(num);
+        acordes.pintarCandados();
+        const siguiente = c.niveles[num];
+        if (!siguiente) return `¡Pasaste el nivel ${num} y terminaste el Camino!`;
+        const desbloquea = siguiente.acordes ? ` Desbloqueaste: ${siguiente.acordes.split(',').join(', ')}.` : '';
+        return `¡Pasaste el nivel ${num}!${desbloquea} Sigue en el Camino.`;
+      });
+    },
+  });
+  progreso.alCambiar(() => acordes.pintarCandados());
   motor.escuchar((d) => {
     medidor(d.nivel);
+    if (sub === 'camino') return;
     if (sub === 'afinador') afinador.cuadro(d);
     else if (sub === 'notas') notas.cuadro(d);
     else if (sub === 'acordes') acordes.cuadro(d);
@@ -36,7 +59,11 @@ function iniciar() {
   cambiarSub(sub);
 }
 
-function actualizar(c) {
+let c = { niveles: [] };
+
+function actualizar(contenido) {
+  c = contenido;
+  camino.actualizar(c.niveles || [], c.acordes || [], c.rutinas || []);
   notas.actualizar(c.lecciones || []);
   acordes.actualizar(c.acordes || [], c.rutinas || []);
   juegos.actualizar(c.acordes || [], c.rutinas || []);
@@ -99,7 +126,7 @@ function cambiarSub(nombre) {
   if (sub === 'juegos' && nombre !== 'juegos') juegos.detener();
   sub = nombre;
   document.querySelectorAll('[data-sub]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.sub === nombre)));
-  ['afinador', 'notas', 'acordes', 'juegos'].forEach((n) => ($('#sub-' + n).hidden = n !== nombre));
+  ['camino', 'afinador', 'notas', 'acordes', 'juegos'].forEach((n) => ($('#sub-' + n).hidden = n !== nombre));
   motor.quiereCroma = nombre === 'acordes' || nombre === 'juegos';
   if (nombre === 'afinador') afinador.redimensionar();
 }
@@ -461,21 +488,48 @@ const acordes = {
     this.rutinas = rutinas;
     const sel = $('#ac-rutina');
     const actual = sel.value;
-    sel.innerHTML =
-      rutinas.map((r) => `<option value="${esc(r.id)}">${esc(r.titulo)}</option>`).join('') +
-      '<option value="__todos">Todos los acordes</option>';
-    $('#ac-biblioteca').innerHTML = todos
-      .map(
-        (a) =>
-          `<button class="mini-acorde" data-acorde="${esc(a.id)}" aria-label="Practicar ${esc(a.nombre)}">${diagramaAcorde(a)}<span>${esc(a.nombre)}</span></button>`
-      )
-      .join('');
+    this.pintarCandados();
     const sigue = actual && (actual === '__todos' || rutinas.some((r) => r.id === actual)) ? actual : rutinas[0]?.id ?? '__todos';
     if (sigue !== actual || !this.secuencia.length) this.elegir(sigue);
     else {
       sel.value = actual;
       this.refrescarSecuencia();
     }
+  },
+
+  // Las rutinas y acordes de niveles que aún no llegas se ven con candado (se pueden ver, no se esconden)
+  pintarCandados() {
+    const sel = $('#ac-rutina');
+    const actual = sel.value;
+    const nivel = camino.nivelActual();
+    sel.innerHTML =
+      this.rutinas
+        .map((r) => {
+          const n = camino.nivelDeRutina(r);
+          return `<option value="${esc(r.id)}">${n > nivel ? `🔒 ${esc(r.titulo)} (nivel ${n})` : esc(r.titulo)}</option>`;
+        })
+        .join('') + '<option value="__todos">Todos los acordes</option>';
+    if (actual) sel.value = actual;
+    const libres = camino.desbloqueados();
+    $('#ac-biblioteca').innerHTML = this.todos
+      .map((a) => {
+        const cerrado = !libres.has(a.id);
+        const etq = cerrado ? `<small>🔒 nivel ${camino.nivelDeAcorde(a.id)}</small>` : '';
+        return `<button class="mini-acorde${cerrado ? ' bloqueado' : ''}" data-acorde="${esc(a.id)}" aria-label="Practicar ${esc(a.nombre)}">${diagramaAcorde(a)}<span>${esc(a.nombre)}</span>${etq}</button>`;
+      })
+      .join('');
+    this.avisoNivel();
+  },
+
+  avisoNivel() {
+    const aviso = $('#ac-aviso');
+    if (!aviso) return;
+    let n = 1;
+    if (this.rutina) n = camino.nivelDeRutina(this.rutina);
+    else if (this.secuencia.length === 1) n = camino.nivelDeAcorde(this.secuencia[0].id);
+    const cerrado = n > camino.nivelActual();
+    aviso.hidden = !cerrado;
+    aviso.textContent = cerrado ? `🔒 Esto es del nivel ${n} del Camino. Puedes practicarlo, pero te va a costar menos si primero pasas los niveles anteriores.` : '';
   },
 
   // Si cambió el contenido en vivo, vuelve a leer los acordes sin perder el paso.
@@ -502,6 +556,7 @@ const acordes = {
     if (biblio) {
       this.rutina = null;
       this.secuencia = [];
+      $('#ac-aviso').hidden = true;
       $('#ac-desc').textContent = 'Toca un acorde para practicarlo.';
       return;
     }
@@ -512,6 +567,7 @@ const acordes = {
     this.idx = 0;
     this.reiniciarEscucha();
     this.mostrar();
+    this.avisoNivel();
     retro('#ac-retro', motor.activo ? 'Rasguea el acorde.' : 'Activa el micrófono y rasguea el acorde.', '');
   },
 
@@ -526,6 +582,7 @@ const acordes = {
     $('#ac-desc').textContent = 'Practicando un solo acorde. Elige "Todos los acordes" para cambiar.';
     this.reiniciarEscucha();
     this.mostrar();
+    this.avisoNivel();
     retro('#ac-retro', motor.activo ? 'Rasguea el acorde.' : 'Activa el micrófono y rasguea el acorde.', '');
   },
 

@@ -1,6 +1,7 @@
 // Arranque de la app: pestañas, sincronización en tiempo real con la base de datos y avisos.
 import { guitarra } from './guitarra.js';
 import { dibujo } from './dibujo.js';
+import { progreso } from './progreso.js';
 
 const $ = (sel) => document.querySelector(sel);
 const CADA_MS = 30000;
@@ -67,10 +68,13 @@ async function sincronizar(inicial = false) {
     }
     build = datos.build;
 
-    const nueva = JSON.stringify(datos.contenido);
+    // El progreso (niveles, récords, aprobados) se aplica aparte para no mostrar el aviso de contenido nuevo
+    const { progreso: prog, ...contenido } = datos.contenido;
+    progreso.cargar(prog || {});
+    const nueva = JSON.stringify(contenido);
     if (nueva !== firma) {
       firma = nueva;
-      aplicar(datos.contenido);
+      aplicar(contenido);
       if (!inicial) aviso('Se actualizó el contenido.');
     }
   } catch {

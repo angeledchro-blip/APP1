@@ -4,10 +4,16 @@ import { midiDeFrecuencia, nota, LETRAS, SOLFEO } from './musica.js';
 import { Estabilizador } from './tono.js';
 import { UMBRAL_NIVEL } from './audio.js';
 import { mastil } from './mastil.js';
+import { camino } from './camino.js';
+import { progreso } from './progreso.js';
 
 const $ = (s) => document.querySelector(s);
 
 const INFO = {
+  repite: {
+    titulo: 'Repite el acorde',
+    ayuda: 'Pon el acorde, rasguea y deja que suene. Luego suelta los dedos y vuelve a ponerlo. Cada vez que suene limpio cuenta.',
+  },
   cambios: {
     titulo: 'Cambios de 1 minuto',
     ayuda: 'Cambia entre los dos acordes lo más rápido que puedas, pero que suenen limpios. Cuento cada cambio que reconozco.',
@@ -35,9 +41,10 @@ let actual = null;
 let p = null; // partida en curso
 let reloj = null;
 let metro = null;
+let reto = null; // { nivel, num, alTerminar } cuando el juego es el reto de un nivel del Camino
 const croma = new Float32Array(12);
 
-export const juegos = { iniciar, actualizar, cuadro, detener };
+export const juegos = { iniciar, actualizar, cuadro, detener, lanzarReto };
 
 function iniciar(dependencias) {
   base = dependencias;
@@ -47,14 +54,29 @@ function iniciar(dependencias) {
     $('#ju-juego').hidden = true;
     $('#ju-menu').hidden = false;
     actual = null;
+    if (reto) {
+      reto = null;
+      base.irA('camino');
+    }
   });
-  $('#ju-empezar').addEventListener('click', () => (p ? terminar(true) : empezar()));
+  progreso.alCambiar(() => {
+    pintarMenu();
+    if (actual && !p) {
+      pintarOpciones();
+      $('#ju-record').textContent = textoRecord();
+    }
+  });
+  $('#ju-empezar').addEventListener('click', () => {
+    if (reto?.listo) return $('#ju-volver').click();
+    return p ? terminar(true) : empezar();
+  });
   $('#ju-opciones').addEventListener('change', () => pantallaInicial());
 }
 
 function actualizar(a, r) {
   acordes = a;
   rutinas = r;
+  pintarMenu();
   if (actual && !p) {
     pintarOpciones();
     pantallaInicial();
@@ -62,13 +84,41 @@ function actualizar(a, r) {
 }
 
 function abrir(id) {
+  if (!reto && document.querySelector(`[data-juego="${id}"]`)?.disabled) return;
   actual = id;
   $('#ju-menu').hidden = true;
   $('#ju-juego').hidden = false;
-  $('#ju-titulo').textContent = INFO[id].titulo;
-  $('#ju-ayuda').textContent = INFO[id].ayuda;
+  $('#ju-titulo').textContent = reto ? `Reto del nivel ${reto.num}` : INFO[id].titulo;
+  $('#ju-ayuda').textContent = reto ? camino.textoReto(reto.nivel) : INFO[id].ayuda;
+  $('#ju-volver').textContent = reto ? '‹ Camino' : '‹ Juegos';
   pintarOpciones();
   pantallaInicial();
+}
+
+// Abre el juego que corresponde al reto de un nivel, con sus opciones fijas
+function lanzarReto(nivel, num, alTerminar) {
+  detener();
+  reto = { nivel, num, alTerminar };
+  abrir(nivel.reto_tipo);
+}
+
+// Los juegos de acordes se abren cuando ya hay al menos 2 acordes desbloqueados
+function pintarMenu() {
+  const n = camino.desbloqueados().size;
+  document.querySelectorAll('[data-juego]').forEach((b) => {
+    const necesita = b.dataset.juego === 'nota' ? 0 : 2;
+    const cerrado = n < necesita;
+    b.disabled = cerrado;
+    let aviso = b.querySelector('.candado');
+    if (cerrado && !aviso) {
+      aviso = document.createElement('em');
+      aviso.className = 'candado';
+      aviso.textContent = '🔒 Se abre al llegar al nivel 2 del Camino';
+      b.appendChild(aviso);
+    } else if (!cerrado && aviso) {
+      aviso.remove();
+    }
+  });
 }
 
 // ---------------------------------------------------------------- opciones y récords
@@ -85,27 +135,46 @@ function valor(id, def) {
   return $('#' + id)?.value ?? def;
 }
 
+// Opción de acorde: los que aún no desbloqueas se ven pero no se pueden escoger
+function opcionAcorde(x, elegido, libres) {
+  if (libres.has(x.id)) return opcion(x.id, x.nombre, elegido);
+  return `<option value="${esc(x.id)}" disabled>🔒 ${esc(x.nombre)} (nivel ${camino.nivelDeAcorde(x.id)})</option>`;
+}
+
+function opcionRutina(x, elegido) {
+  const n = camino.nivelDeRutina(x);
+  if (n <= camino.nivelActual()) return opcion(x.id, x.titulo, elegido);
+  return `<option value="${esc(x.id)}" disabled>🔒 ${esc(x.titulo)} (nivel ${n})</option>`;
+}
+
 function pintarOpciones() {
   const cont = $('#ju-opciones');
-  if (actual === 'cambios') {
-    const a = valor('ju-a', 'Em');
-    const b = valor('ju-b', 'Am');
-    const lista = (sel) => acordes.map((x) => opcion(x.id, x.nombre, sel)).join('');
+  const libres = camino.desbloqueados();
+  const primeros = acordes.filter((x) => libres.has(x.id));
+  if (actual === 'repite') {
+    const a = reto ? reto.nivel.reto_param : valor('ju-acorde', primeros[0]?.id);
+    cont.innerHTML = campo('Acorde', 'ju-acorde', acordes.map((x) => opcionAcorde(x, a, libres)).join(''));
+  } else if (actual === 'cambios') {
+    const [ra, rb] = reto ? String(reto.nivel.reto_param).split(',') : [];
+    const a = ra || valor('ju-a', primeros[0]?.id);
+    const b = rb || valor('ju-b', primeros.find((x) => x.id !== a)?.id);
+    const lista = (sel) => acordes.map((x) => opcionAcorde(x, sel, libres)).join('');
     cont.innerHTML = campo('Acorde 1', 'ju-a', lista(a)) + campo('Acorde 2', 'ju-b', lista(b));
   } else if (actual === 'sorpresa') {
-    const n = valor('ju-nivel', '1');
+    const n = valor('ju-pool', 'mios');
     cont.innerHTML = campo(
       'Acordes',
-      'ju-nivel',
-      opcion(1, 'Básicos', n) + opcion(2, 'Con séptimas', n) + opcion(3, 'Todos (con cejillas)', n)
+      'ju-pool',
+      opcion('mios', `Los que llevas (${primeros.length})`, n) + opcion('todos', 'Todos (incluye los difíciles)', n)
     );
   } else if (actual === 'ritmo') {
-    const r = valor('ju-rutina', rutinas[0]?.id);
-    const bpm = valor('ju-bpm', '60');
+    const libresR = rutinas.filter((x) => camino.nivelDeRutina(x) <= camino.nivelActual());
+    const r = reto ? reto.nivel.reto_param : valor('ju-rutina', libresR[0]?.id);
+    const bpm = reto ? String(reto.nivel.reto_meta) : valor('ju-bpm', '60');
     let bpms = '';
     for (let v = 40; v <= 140; v += 10) bpms += opcion(v, `${v} BPM`, bpm);
     cont.innerHTML =
-      campo('Rutina', 'ju-rutina', rutinas.map((x) => opcion(x.id, x.titulo, r)).join('')) + campo('Velocidad', 'ju-bpm', bpms);
+      campo('Rutina', 'ju-rutina', rutinas.map((x) => opcionRutina(x, r)).join('')) + campo('Velocidad', 'ju-bpm', bpms);
   } else if (actual === 'nota') {
     const m = valor('ju-modo', 'naturales');
     cont.innerHTML = campo(
@@ -117,41 +186,34 @@ function pintarOpciones() {
 }
 
 function bloquearOpciones(si) {
-  document.querySelectorAll('#ju-opciones select').forEach((s) => (s.disabled = si));
+  document.querySelectorAll('#ju-opciones select').forEach((s) => (s.disabled = si || Boolean(reto)));
 }
 
-function leerRecords() {
-  try {
-    return JSON.parse(localStorage.getItem('records') || '{}');
-  } catch {
-    return {};
-  }
+// Récords guardados en la base de datos (progreso) con claves record:<juego>:<opciones>
+function leerRecord(clave) {
+  const v = progreso.leer('record:' + clave);
+  return v === null ? undefined : Number(v);
 }
 
 function guardarRecord(clave, v, mayorEsMejor) {
-  const r = leerRecords();
-  const previo = r[clave];
+  const previo = leerRecord(clave);
   const nuevo = previo === undefined || (mayorEsMejor ? v > previo : v < previo);
-  if (nuevo) {
-    r[clave] = v;
-    try {
-      localStorage.setItem('records', JSON.stringify(r));
-    } catch {
-      /* sin almacenamiento */
-    }
-  }
+  if (nuevo) progreso.guardar('record:' + clave, v);
   return { nuevo, previo };
 }
 
 function claveRecord() {
   if (actual === 'cambios') return `cambios:${valor('ju-a')}-${valor('ju-b')}`;
-  if (actual === 'sorpresa') return `sorpresa:${valor('ju-nivel')}`;
+  if (actual === 'sorpresa') return `sorpresa:${valor('ju-pool')}`;
   if (actual === 'ritmo') return `ritmo:${valor('ju-rutina')}`;
+  if (actual === 'repite') return null;
   return `nota:${valor('ju-modo')}`;
 }
 
 function textoRecord() {
-  const v = leerRecords()[claveRecord()];
+  const clave = claveRecord();
+  if (!clave) return '';
+  const v = leerRecord(clave);
   if (v === undefined) return 'Todavía no tienes récord aquí.';
   if (actual === 'cambios') return `Tu récord: ${v} cambios`;
   if (actual === 'ritmo') return `Tu récord: ${v} BPM`;
@@ -164,15 +226,26 @@ function pantallaInicial() {
   $('#ju-record').textContent = textoRecord();
   $('#ju-pulso').hidden = true;
   $('#ju-empezar').textContent = 'Empezar';
-  const et = { cambios: ['seg', 'cambios'], sorpresa: ['seg', 'ronda'], ritmo: ['BPM', 'a tiempo'], nota: ['seg', 'ronda'] }[actual];
+  const et = {
+    repite: ['seg', 'limpios'],
+    cambios: ['seg', 'cambios'],
+    sorpresa: ['seg', 'ronda'],
+    ritmo: ['BPM', 'a tiempo'],
+    nota: ['seg', 'ronda'],
+  }[actual];
   $('#ju-tiempo-et').textContent = et[0];
   $('#ju-puntos-et').textContent = et[1];
   $('#ju-sigue').textContent = '';
   $('#ju-diagrama').innerHTML = '';
-  if (actual === 'cambios') {
+  if (actual === 'repite') {
+    const a = buscar(valor('ju-acorde'));
+    $('#ju-tiempo').textContent = '0';
+    $('#ju-puntos').textContent = `0/${metaRepite()}`;
+    if (a) mostrarAcorde(a, null);
+  } else if (actual === 'cambios') {
     const a = buscar(valor('ju-a'));
     $('#ju-tiempo').textContent = '60';
-    $('#ju-puntos').textContent = '0';
+    $('#ju-puntos').textContent = reto ? `0/${reto.nivel.reto_meta}` : '0';
     if (a) mostrarAcorde(a, buscar(valor('ju-b')));
   } else if (actual === 'ritmo') {
     $('#ju-tiempo').textContent = valor('ju-bpm');
@@ -185,7 +258,11 @@ function pantallaInicial() {
     $('#ju-puntos').textContent = '0/10';
     $('#ju-nombre').textContent = '?';
   }
-  retro('Dale Empezar cuando estés listo.', '');
+  retro(reto ? 'Cuando estés listo, dale Empezar. Si no sale, practica y vuelve a intentarlo.' : 'Dale Empezar cuando estés listo.', '');
+}
+
+function metaRepite() {
+  return reto ? Number(reto.nivel.reto_meta) || 5 : 5;
 }
 
 function mostrarAcorde(a, siguiente, conDiagrama = true) {
@@ -235,7 +312,18 @@ async function empezar() {
   p = { id: actual, fase: 'cuenta', bueno: 0, cuentaFin: ahora + 3000, estab: new Estabilizador(5), estables: 0 };
   croma.fill(0);
 
-  if (actual === 'cambios') {
+  if (actual === 'repite') {
+    p.objetivo = buscar(valor('ju-acorde'));
+    if (!p.objetivo) {
+      p = null;
+      retro('Escoge un acorde.', 'corregir');
+      return;
+    }
+    p.puntos = 0;
+    p.meta = metaRepite();
+    p.libre = true;
+    p.sinAcorde = 0;
+  } else if (actual === 'cambios') {
     p.a = buscar(valor('ju-a'));
     p.b = buscar(valor('ju-b'));
     if (!p.a || !p.b || p.a === p.b) {
@@ -247,9 +335,9 @@ async function empezar() {
     p.puntos = 0;
     p.primero = true;
   } else if (actual === 'sorpresa') {
-    const nivel = Number(valor('ju-nivel', '1'));
-    p.pool = acordes.filter((a) => Number(a.nivel) <= nivel);
-    if (p.pool.length < 2) p.pool = acordes.slice();
+    const libres = camino.desbloqueados();
+    p.pool = valor('ju-pool', 'mios') === 'todos' ? acordes.slice() : acordes.filter((a) => libres.has(a.id));
+    if (p.pool.length < 2) p.pool = acordes.filter((a) => Number(a.nivel) <= 1);
     p.ronda = 0;
     p.tiempos = [];
   } else if (actual === 'nota') {
@@ -271,7 +359,11 @@ async function empezar() {
 function arrancar() {
   p.fase = 'jugando';
   const ahora = performance.now();
-  if (p.id === 'cambios') {
+  if (p.id === 'repite') {
+    p.t0 = ahora;
+    mostrarAcorde(p.objetivo, null);
+    retro(`Pon ${p.objetivo.nombre} y rasguea.`, '');
+  } else if (p.id === 'cambios') {
     p.fin = ahora + 60000;
     mostrarAcorde(p.objetivo, p.objetivo === p.a ? p.b : p.a);
     retro(`¡Ya! Toca ${p.objetivo.nombre}.`, '');
@@ -315,6 +407,10 @@ function tic() {
     $('#ju-diagrama').innerHTML = '';
     return;
   }
+  if (p.id === 'repite') {
+    $('#ju-tiempo').textContent = String(Math.floor((ahora - p.t0) / 1000));
+    return;
+  }
   if (p.id === 'cambios') {
     const resta = Math.max(0, Math.ceil((p.fin - ahora) / 1000));
     $('#ju-tiempo').textContent = String(resta);
@@ -352,6 +448,27 @@ function cuadro(d) {
   if (p.id === 'ritmo') return cuadroRitmo(d);
   if (p.fase !== 'jugando') return;
 
+  if (p.id === 'repite') {
+    if (!p.libre) {
+      // Para contar otra vez, el acorde tiene que dejar de sonar (soltar los dedos o apagar las cuerdas)
+      const suena = d.nivel >= UMBRAL_NIVEL * 1.5 && d.croma && evaluarAcorde(croma, p.objetivo).coincide;
+      p.sinAcorde = suena ? 0 : p.sinAcorde + 1;
+      if (p.sinAcorde >= 12) {
+        p.libre = true;
+        retro(`Ahora vuelve a poner ${p.objetivo.nombre}.`, '');
+      }
+      return;
+    }
+    if (!oye(d, p.objetivo, 8)) return;
+    p.puntos++;
+    p.libre = false;
+    p.sinAcorde = 0;
+    $('#ju-puntos').textContent = `${p.puntos}/${p.meta}`;
+    festejar();
+    if (p.puntos >= p.meta) return terminar(false);
+    retro(`¡Limpio! (${p.puntos}/${p.meta}) Suelta los dedos…`, 'bien');
+    return;
+  }
   if (p.id === 'cambios') {
     if (!oye(d, p.objetivo, 7)) return;
     if (p.primero) {
@@ -359,7 +476,7 @@ function cuadro(d) {
       retro(`¡Eso! Ahora cambia a ${p.objetivo === p.a ? p.b.nombre : p.a.nombre}.`, 'bien');
     } else {
       p.puntos++;
-      $('#ju-puntos').textContent = String(p.puntos);
+      $('#ju-puntos').textContent = reto ? `${p.puntos}/${reto.nivel.reto_meta}` : String(p.puntos);
       retro('¡Cambio!', 'bien');
     }
     festejar();
@@ -548,8 +665,16 @@ function terminar(cancelado) {
     retro('Juego terminado.', '');
     return;
   }
-  resultado(partida);
+  const exito = resultado(partida);
   $('#ju-record').textContent = textoRecord();
+  if (reto && exito) {
+    const r = reto;
+    reto.alTerminar(true).then((texto) => {
+      retro(texto, 'bien');
+      $('#ju-empezar').textContent = 'Volver al camino';
+      r.listo = true;
+    });
+  }
 }
 
 function detener() {
@@ -559,9 +684,15 @@ function detener() {
 
 function resultado(r) {
   let texto = '';
-  if (r.id === 'cambios') {
+  let exito = false;
+  if (r.id === 'repite') {
+    exito = r.puntos >= r.meta;
+    texto = exito ? `¡Lo hiciste ${r.puntos} veces limpio!` : `Llevabas ${r.puntos} de ${r.meta}.`;
+  } else if (r.id === 'cambios') {
     const { nuevo } = guardarRecord(`cambios:${r.a.id}-${r.b.id}`, r.puntos, true);
     texto = `Hiciste ${r.puntos} cambios en un minuto.`;
+    if (reto) exito = r.puntos >= Number(reto.nivel.reto_meta);
+    if (reto && !exito) texto += ` Para pasar el nivel necesitas ${reto.nivel.reto_meta}.`;
     if (r.puntos < 15) texto += ' Antes de mover la mano, piensa la forma del siguiente acorde.';
     else if (r.puntos < 30) texto += ' Bien. Intenta mover todos los dedos juntos, como una sola pieza.';
     else texto += ' ¡Muy bien! Prueba con otro par de acordes.';
@@ -572,7 +703,7 @@ function resultado(r) {
     } else {
       const prom = r.tiempos.reduce((s, x) => s + x.t, 0) / r.tiempos.length;
       const lento = r.tiempos.reduce((a, b) => (b.t > a.t ? b : a));
-      const clave = r.id === 'sorpresa' ? `sorpresa:${valor('ju-nivel')}` : `nota:${valor('ju-modo')}`;
+      const clave = r.id === 'sorpresa' ? `sorpresa:${valor('ju-pool')}` : `nota:${valor('ju-modo')}`;
       const { nuevo } = r.tiempos.length === 10 ? guardarRecord(clave, Math.round(prom * 10) / 10, false) : { nuevo: false };
       texto = `Promedio: ${prom.toFixed(1)} s. El que más te costó: ${lento.acorde || lento.nota} (${lento.t.toFixed(1)} s).`;
       if (r.id === 'nota' && r.errores) texto += ` Fallaste ${r.errores} vez${r.errores === 1 ? '' : 'es'}.`;
@@ -582,11 +713,17 @@ function resultado(r) {
     const n = r.aciertos.filter(Boolean).length;
     const pct = Math.round((n / r.compases) * 100);
     texto = `${n} de ${r.compases} compases a tiempo (${pct}%).`;
+    if (reto) {
+      exito = pct >= 80;
+      if (!exito) texto += ' Para pasar el nivel necesitas 80%.';
+    }
     if (pct >= 80) {
       const { nuevo } = guardarRecord(`ritmo:${r.rutina.id}`, r.bpm, true);
       if (nuevo) texto += ' ¡Nuevo récord!';
     }
-    if (pct >= 90 && r.bpm < 140) {
+    if (reto) {
+      /* en el reto la velocidad es fija */
+    } else if (pct >= 90 && r.bpm < 140) {
       texto += ` ¡Súbele a ${r.bpm + 10} BPM!`;
       const sel = $('#ju-bpm');
       if (sel) sel.value = String(r.bpm + 10);
@@ -596,7 +733,8 @@ function resultado(r) {
       if (sel) sel.value = String(r.bpm - 10);
     }
   }
-  retro(texto, 'bien');
+  retro(texto, exito || !reto ? 'bien' : 'corregir');
+  return exito;
 }
 
 function esc(s) {
