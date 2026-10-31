@@ -9,6 +9,7 @@ let build = null;
 let firma = null;
 let recargaPendiente = false;
 let vista = 'guitarra';
+let mensajes = { guitarra: '', dibujo: '' };
 
 function leerVista() {
   try {
@@ -32,6 +33,7 @@ function cambiarVista(v) {
   document.querySelectorAll('[data-vista]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.vista === v)));
   $('#vista-dibujo').hidden = v !== 'dibujo';
   $('#vista-guitarra').hidden = v !== 'guitarra';
+  pintarMensaje();
   // Libera micrófono o cámara de la vista que se deja
   if (v === 'dibujo') guitarra.pausar();
   else dibujo.pausar();
@@ -76,10 +78,18 @@ async function sincronizar(inicial = false) {
   }
 }
 
-function aplicar(c) {
+// Cada sección tiene su propio mensaje
+function pintarMensaje() {
   const m = $('#mensaje');
-  m.textContent = c.mensaje || '';
-  m.hidden = !c.mensaje;
+  const texto = mensajes[vista] || '';
+  m.textContent = texto;
+  m.hidden = !texto;
+  m.classList.remove('abierto');
+}
+
+function aplicar(c) {
+  mensajes = c.mensajes || { guitarra: '', dibujo: '' };
+  pintarMensaje();
   guitarra.actualizar(c);
   dibujo.configurar(c);
   dibujo.actualizar(c.ejercicios || []);

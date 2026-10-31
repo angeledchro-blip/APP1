@@ -136,7 +136,10 @@ async function contenido(env) {
       build: env.CF_VERSION_METADATA?.id || null,
       ia: env.ANTHROPIC_API_KEY ? 'claude' : 'workers-ai',
       contenido: {
-        mensaje: config.mensaje || '',
+        mensajes: {
+          guitarra: config.mensaje_guitarra || '',
+          dibujo: config.mensaje_dibujo || '',
+        },
         intervaloVivo: Math.max(8, Number(config.intervalo_vivo_seg || 20)),
         acordes: acordes.results,
         rutinas: rutinas.results,

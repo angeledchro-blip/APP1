@@ -4,7 +4,7 @@
 //   2) Editar este archivo y subir SEED_VERSION: al siguiente deploy se actualizan las filas con el mismo id.
 // Las filas que se agregan directo en D1 no se borran al resembrar.
 
-export const SEED_VERSION = 2;
+export const SEED_VERSION = 3;
 
 export const ESQUEMA = [
   `CREATE TABLE IF NOT EXISTS config (
@@ -66,8 +66,11 @@ export const ESQUEMA = [
 
 // Valores de config. Al resembrar NO se pisan los que ya existen (para no borrar cambios hechos en vivo).
 export const CONFIG = {
-  mensaje:
-    'Para arrancar: 10 minutos de "Líneas rectas desde el hombro" y 10 de la rutina Em ↔ Am. Cuando acabes las líneas, tómale foto a la hoja para revisarla.',
+  // Mensaje de arriba en cada sección
+  mensaje_guitarra:
+    'Para arrancar: afina la guitarra y luego 10 minutos de la rutina Em ↔ Am. Cuando ya te salga, prueba el juego "Cambios de 1 minuto".',
+  mensaje_dibujo:
+    'Para arrancar: 10 minutos de "Líneas rectas desde el hombro". Abre la cámara y apunta a tu hoja: te voy corrigiendo en vivo.',
   limite_revisiones_dia: '40',
   modelo_claude: 'claude-sonnet-5-5',
   modelo_workers_ai: '@cf/meta/llama-4-scout-17b-16e-instruct',

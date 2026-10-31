@@ -236,7 +236,7 @@ textarea {
 
 .segmentos {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   margin-top: 12px;
   padding: 4px;
   gap: 4px;
@@ -247,6 +247,8 @@ textarea {
 .segmentos button {
   border: 0;
   min-height: 44px;
+  padding: 0 4px;
+  font-size: 15px;
   border-radius: 10px;
   color: var(--papel-2);
 }
@@ -635,6 +637,138 @@ textarea {
   line-height: 1;
 }
 
+/* ---------- Juegos ---------- */
+
+.juegos-menu {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.juego-tarjeta {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  padding: 14px 16px;
+  min-height: 0;
+  border-radius: 16px;
+  font-weight: 400;
+}
+
+.juego-tarjeta strong {
+  font-family: var(--f-display);
+  font-weight: 800;
+  font-size: 26px;
+  line-height: 1.05;
+}
+
+.juego-tarjeta span {
+  color: var(--papel-2);
+  font-size: 14px;
+}
+
+.juego-cabeza {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.juego-cabeza h2 {
+  margin: 0;
+  font-family: var(--f-display);
+  font-weight: 800;
+  font-size: 30px;
+  line-height: 1;
+}
+
+button.chico {
+  min-height: 38px;
+  padding: 0 12px;
+  font-size: 14px;
+  flex: none;
+}
+
+.juego-opciones {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0 10px;
+}
+
+.record {
+  margin: 10px 0 0;
+  font-size: 14px;
+  color: var(--lila);
+}
+
+.tablero {
+  margin-top: 12px;
+  border-radius: var(--r-panel);
+}
+
+.tablero.acierto {
+  animation: acierto 0.45s ease-out;
+}
+
+@keyframes acierto {
+  0% {
+    box-shadow: 0 0 0 0 var(--menta);
+  }
+  100% {
+    box-shadow: 0 0 0 14px transparent;
+  }
+}
+
+.marcador {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.marcador div {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: var(--r-control);
+  background: var(--grafito-2);
+}
+
+.cifra {
+  font-family: var(--f-display);
+  font-weight: 800;
+  font-size: 38px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.marcador small {
+  color: var(--papel-2);
+  font-size: 13px;
+}
+
+.pulso {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.pulso span {
+  height: 12px;
+  border-radius: 6px;
+  background: var(--grafito-3);
+}
+
+.pulso span:first-child {
+  outline: 2px solid var(--grafito-3);
+  outline-offset: 2px;
+}
+
+.pulso span.activo {
+  background: var(--lila);
+}
+
 /* ---------- Dibujo ---------- */
 
 #vista-dibujo .campo:first-child {
@@ -689,6 +823,11 @@ textarea {
 .camara img {
   object-fit: contain;
   background: #000;
+}
+
+.camara:has(#di-vacio:not([hidden])) {
+  aspect-ratio: auto;
+  min-height: 120px;
 }
 
 .camara-vacia {
@@ -837,8 +976,18 @@ textarea {
   stroke-linecap: round;
 }
 
+.pestanas {
+  padding-inline: 12px;
+  gap: 10px;
+}
+
 .pestanas button[aria-selected='true'] {
-  color: var(--lila);
+  color: var(--lila-tinta);
+  background: var(--lila);
+  border-radius: 16px;
+  height: calc(var(--alto-pestanas) - 12px);
+  margin-block: 6px;
+  font-weight: 700;
 }
 
 .toast {

@@ -55,17 +55,18 @@ test('crea las tablas, siembra el contenido y lo entrega', async () => {
   assert.ok(d.contenido.rutinas.length >= 5);
   assert.ok(d.contenido.lecciones.length >= 5);
   assert.ok(d.contenido.ejercicios.length >= 10);
-  assert.ok(d.contenido.mensaje.length > 0);
+  assert.ok(d.contenido.mensajes.guitarra.length > 0);
+  assert.ok(d.contenido.mensajes.dibujo.length > 0);
 });
 
 test('un cambio en la base se ve en el contenido (tiempo real)', async () => {
   const w = await nuevoWorker();
   const env = { DB: d1Falso() };
   await pedir(w, env, '/api/contenido');
-  env.DB._db.prepare("UPDATE config SET valor = 'Hoy: puro cambio G ↔ C' WHERE clave = 'mensaje'").run();
+  env.DB._db.prepare("UPDATE config SET valor = 'Hoy: puro cambio G ↔ C' WHERE clave = 'mensaje_guitarra'").run();
   env.DB._db.prepare("UPDATE acordes SET activo = 0 WHERE id = 'Bm'").run();
   const d = await (await pedir(w, env, '/api/contenido')).json();
-  assert.equal(d.contenido.mensaje, 'Hoy: puro cambio G ↔ C');
+  assert.equal(d.contenido.mensajes.guitarra, 'Hoy: puro cambio G ↔ C');
   assert.ok(!d.contenido.acordes.some((a) => a.id === 'Bm'));
 });
 
@@ -147,11 +148,11 @@ test('al subir SEED_VERSION no pisa el mensaje editado en vivo', async () => {
   const w = await nuevoWorker();
   const env = { DB: d1Falso() };
   await pedir(w, env, '/api/contenido');
-  env.DB._db.prepare("UPDATE config SET valor = 'editado' WHERE clave = 'mensaje'").run();
+  env.DB._db.prepare("UPDATE config SET valor = 'editado' WHERE clave = 'mensaje_dibujo'").run();
   env.DB._db.prepare("UPDATE config SET valor = '0' WHERE clave = 'seed_version'").run();
   const w2 = await nuevoWorker();
   const d = await (await pedir(w2, env, '/api/contenido')).json();
-  assert.equal(d.contenido.mensaje, 'editado');
+  assert.equal(d.contenido.mensajes.dibujo, 'editado');
 });
 
 test('cámara en vivo: da un consejo corto, no repite y respeta el límite', async () => {

@@ -38,6 +38,7 @@
           <button role="tab" data-sub="afinador" aria-selected="true">Afinador</button>
           <button role="tab" data-sub="notas" aria-selected="false">Notas</button>
           <button role="tab" data-sub="acordes" aria-selected="false">Acordes</button>
+          <button role="tab" data-sub="juegos" aria-selected="false">Juegos</button>
         </div>
 
         <!-- Afinador -->
@@ -105,6 +106,56 @@
             </div>
           </div>
           <div id="ac-biblioteca" class="biblioteca" hidden></div>
+        </div>
+
+        <!-- Juegos -->
+        <div id="sub-juegos" class="subvista" hidden>
+          <div id="ju-menu" class="juegos-menu">
+            <button class="juego-tarjeta" data-juego="cambios">
+              <strong>Cambios de 1 minuto</strong>
+              <span>¿Cuántos cambios limpios entre dos acordes haces en 60 segundos?</span>
+            </button>
+            <button class="juego-tarjeta" data-juego="sorpresa">
+              <strong>Acorde sorpresa</strong>
+              <span>Sale un acorde al azar y lo tienes que tocar lo más rápido que puedas.</span>
+            </button>
+            <button class="juego-tarjeta" data-juego="ritmo">
+              <strong>Al ritmo</strong>
+              <span>Cambia de acorde cada compás siguiendo el metrónomo. Súbele la velocidad.</span>
+            </button>
+            <button class="juego-tarjeta" data-juego="nota">
+              <strong>Encuentra la nota</strong>
+              <span>Sale una nota y la buscas en el mástil para aprendértelo.</span>
+            </button>
+          </div>
+
+          <div id="ju-juego" hidden>
+            <div class="juego-cabeza">
+              <button id="ju-volver" class="chico" aria-label="Volver a los juegos">‹ Juegos</button>
+              <h2 id="ju-titulo"></h2>
+            </div>
+            <p id="ju-ayuda" class="descripcion"></p>
+            <div id="ju-opciones" class="juego-opciones"></div>
+            <p id="ju-record" class="record"></p>
+            <div id="ju-tablero" class="tablero">
+              <div class="marcador">
+                <div><span id="ju-tiempo" class="cifra">0</span><small id="ju-tiempo-et">seg</small></div>
+                <div><span id="ju-puntos" class="cifra">0</span><small id="ju-puntos-et">puntos</small></div>
+              </div>
+              <div class="acorde-actual">
+                <div class="acorde-cabeza">
+                  <span id="ju-nombre" class="nombre-acorde">?</span>
+                  <span id="ju-sigue" class="sigue"></span>
+                </div>
+                <div id="ju-diagrama" class="diagrama-caja"></div>
+              </div>
+              <div id="ju-pulso" class="pulso" hidden aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+            </div>
+            <p id="ju-retro" class="retro" data-tipo="" aria-live="polite"></p>
+            <div class="acciones">
+              <button id="ju-empezar" class="primario">Empezar</button>
+            </div>
+          </div>
         </div>
       </section>
 

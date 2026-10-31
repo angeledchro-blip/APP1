@@ -1,8 +1,10 @@
-// Vista de guitarra: afinador, práctica de notas y práctica de acordes.
+// Vista de guitarra: afinador, práctica de notas, práctica de acordes y juegos.
 import { MotorAudio, UMBRAL_NIVEL } from './audio.js';
 import { Estabilizador } from './tono.js';
 import { CUERDAS, LETRAS, midiDeFrecuencia, nota, cuerda as datosCuerda, parsearNotas } from './musica.js';
 import { evaluarAcorde, consejoAcorde, diagramaAcorde, clasesDeAcorde } from './acordes.js';
+import { mastil } from './mastil.js';
+import { juegos } from './juegos.js';
 
 const $ = (sel) => document.querySelector(sel);
 const motor = new MotorAudio();
@@ -23,11 +25,13 @@ function iniciar() {
   afinador.iniciar();
   notas.iniciar();
   acordes.iniciar();
+  juegos.iniciar({ motor, asegurarMic });
   motor.escuchar((d) => {
     medidor(d.nivel);
     if (sub === 'afinador') afinador.cuadro(d);
     else if (sub === 'notas') notas.cuadro(d);
-    else acordes.cuadro(d);
+    else if (sub === 'acordes') acordes.cuadro(d);
+    else juegos.cuadro(d);
   });
   cambiarSub(sub);
 }
@@ -35,6 +39,7 @@ function iniciar() {
 function actualizar(c) {
   notas.actualizar(c.lecciones || []);
   acordes.actualizar(c.acordes || [], c.rutinas || []);
+  juegos.actualizar(c.acordes || [], c.rutinas || []);
 }
 
 function pausar() {
@@ -45,20 +50,28 @@ function pausar() {
 }
 
 async function alternarMic() {
-  let error = '';
   if (motor.activo) {
     motor.detener();
+    pintarMic();
   } else {
-    try {
-      await motor.iniciar();
-    } catch (err) {
-      error =
-        err?.name === 'NotAllowedError'
-          ? 'La app no tiene permiso de usar el micrófono. Dale permiso en Ajustes del teléfono > Apps > Práctica > Permisos.'
-          : 'No se pudo abrir el micrófono: ' + (err?.message || err);
-    }
+    await asegurarMic();
+  }
+}
+
+// Prende el micrófono si está apagado. Devuelve true si quedó escuchando.
+async function asegurarMic() {
+  if (motor.activo) return true;
+  let error = '';
+  try {
+    await motor.iniciar();
+  } catch (err) {
+    error =
+      err?.name === 'NotAllowedError'
+        ? 'La app no tiene permiso de usar el micrófono. Dale permiso en Ajustes del teléfono > Apps > Práctica > Permisos.'
+        : 'No se pudo abrir el micrófono: ' + (err?.message || err);
   }
   pintarMic(error);
+  return motor.activo;
 }
 
 function pintarMic(error = '') {
@@ -67,7 +80,14 @@ function pintarMic(error = '') {
   $('#mic-estado').textContent = error;
   $('#mic-estado').hidden = !error;
   document.body.classList.toggle('escuchando', motor.activo);
-  if (!motor.activo) medidor(0);
+  if (!motor.activo) {
+    // Limpia lo que se quedó en pantalla de la última escucha
+    medidor(0);
+    juegos.detener();
+    afinador.apagar();
+    acordes.limpiar();
+    if (notas.lista.length && !notas.bloqueado) retro('#no-retro', 'Activa el micrófono y toca la nota.', '');
+  }
 }
 
 function medidor(nivel) {
@@ -76,10 +96,11 @@ function medidor(nivel) {
 }
 
 function cambiarSub(nombre) {
+  if (sub === 'juegos' && nombre !== 'juegos') juegos.detener();
   sub = nombre;
   document.querySelectorAll('[data-sub]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.sub === nombre)));
-  ['afinador', 'notas', 'acordes'].forEach((n) => ($('#sub-' + n).hidden = n !== nombre));
-  motor.quiereCroma = nombre === 'acordes';
+  ['afinador', 'notas', 'acordes', 'juegos'].forEach((n) => ($('#sub-' + n).hidden = n !== nombre));
+  motor.quiereCroma = nombre === 'acordes' || nombre === 'juegos';
   if (nombre === 'afinador') afinador.redimensionar();
 }
 
@@ -116,6 +137,15 @@ const afinador = {
       requestAnimationFrame(animar);
     };
     requestAnimationFrame(animar);
+  },
+
+  apagar() {
+    this.color = 'apagado';
+    this.afinadaCuadros = 0;
+    this.estab.limpiar();
+    $('#af-flecha').dataset.dir = '';
+    $('#af-indicacion').textContent = '';
+    $('#af-cents').textContent = '';
   },
 
   redimensionar() {
@@ -396,36 +426,6 @@ const notas = {
   },
 };
 
-// Mástil horizontal: la 1ª cuerda arriba, como en las tablaturas.
-function mastil(cuerdaNum, traste) {
-  const trastes = Math.max(5, traste + 1);
-  const W = 320;
-  const izq = 26;
-  const der = 8;
-  const arriba = 12;
-  const sepC = 18;
-  const H = arriba * 2 + sepC * 5;
-  const anchoT = (W - izq - der) / trastes;
-  let s = `<svg viewBox="0 0 ${W} ${H + 16}" class="mastil-svg" role="img" aria-label="Posición en el mástil">`;
-  for (let f = 0; f <= trastes; f++) {
-    const x = izq + f * anchoT;
-    s += `<line x1="${x}" y1="${arriba}" x2="${x}" y2="${arriba + sepC * 5}" class="${f === 0 ? 'cejuela' : 'traste'}"/>`;
-    if (f > 0) s += `<text x="${x - anchoT / 2}" y="${H + 12}" class="num-traste" text-anchor="middle">${f}</text>`;
-  }
-  for (let i = 0; i < 6; i++) {
-    const y = arriba + i * sepC;
-    s += `<line x1="${izq}" y1="${y}" x2="${W - der}" y2="${y}" class="cuerda" style="stroke-width:${1 + i * 0.35}"/>`;
-    s += `<text x="${izq - 9}" y="${y + 4}" class="num-cuerda" text-anchor="end">${i + 1}</text>`;
-  }
-  const y = arriba + (cuerdaNum - 1) * sepC;
-  if (traste === 0) {
-    s += `<circle cx="${izq - 0}" cy="${y}" r="7" class="aire-objetivo"/>`;
-  } else {
-    s += `<circle cx="${izq + (traste - 0.5) * anchoT}" cy="${y}" r="8" class="punto"/>`;
-  }
-  return s + '</svg>';
-}
-
 // ------------------------------------------------------------------ Acordes
 
 const acordes = {
@@ -541,6 +541,13 @@ const acordes = {
     this.bueno = 0;
     this.sonando = 0;
     this.bloqueado = false;
+  },
+
+  limpiar() {
+    this.croma.fill(0);
+    document.querySelectorAll('.barra-croma').forEach((b) => b.style.setProperty('--v', '0'));
+    this.reiniciarEscucha();
+    if (this.secuencia.length) retro('#ac-retro', 'Activa el micrófono y rasguea el acorde.', '');
   },
 
   mostrar() {
