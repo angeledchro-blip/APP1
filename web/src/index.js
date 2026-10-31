@@ -17,6 +17,9 @@ export default {
       if (url.pathname === '/api/dibujo/revisar' && request.method === 'POST') {
         return await revisarDibujo(request, env);
       }
+      if (url.pathname === '/api/dibujo/vivo' && request.method === 'POST') {
+        return await vistazoEnVivo(request, env);
+      }
       return json({ error: 'Ruta no encontrada.' }, 404);
     } catch (err) {
       console.error(err);
@@ -134,6 +137,7 @@ async function contenido(env) {
       ia: env.ANTHROPIC_API_KEY ? 'claude' : 'workers-ai',
       contenido: {
         mensaje: config.mensaje || '',
+        intervaloVivo: Math.max(8, Number(config.intervalo_vivo_seg || 20)),
         acordes: acordes.results,
         rutinas: rutinas.results,
         lecciones: lecciones.results,
@@ -189,8 +193,8 @@ async function revisarDibujo(request, env) {
   let resultado;
   try {
     resultado = env.ANTHROPIC_API_KEY
-      ? await revisarConClaude(env, config, imagen, texto)
-      : await revisarConWorkersAI(env, config, imagen, texto);
+      ? await revisarConClaude(env, imagen, texto, SISTEMA, config.modelo_claude || 'claude-sonnet-5-5', 3000)
+      : await revisarConWorkersAI(env, config, imagen, texto, SISTEMA, 900);
   } catch (err) {
     console.error(err);
     return json({ error: 'La IA no pudo revisar la foto: ' + (err?.message || String(err)) }, 502);
@@ -258,13 +262,12 @@ function armarPeticion(ejercicio, nota, historial) {
   return partes.join('\n');
 }
 
-async function revisarConClaude(env, config, imagen, texto) {
-  const modelo = config.modelo_claude || 'claude-sonnet-5-5';
+async function revisarConClaude(env, imagen, texto, sistema, modelo, maxTokens) {
   const cuerpo = {
     model: modelo,
-    max_tokens: 3000,
+    max_tokens: maxTokens,
     output_config: { effort: 'low' },
-    system: SISTEMA,
+    system: sistema,
     messages: [
       {
         role: 'user',
@@ -306,12 +309,12 @@ function llamarClaude(env, cuerpo) {
   });
 }
 
-async function revisarConWorkersAI(env, config, imagen, texto) {
+async function revisarConWorkersAI(env, config, imagen, texto, sistema, maxTokens) {
   if (!env.AI) throw new Error('no hay IA conectada (falta el binding AI en Cloudflare).');
   const modelo = config.modelo_workers_ai || '@cf/meta/llama-4-scout-17b-16e-instruct';
   const r = await env.AI.run(modelo, {
     messages: [
-      { role: 'system', content: SISTEMA },
+      { role: 'system', content: sistema },
       {
         role: 'user',
         content: [
@@ -320,12 +323,71 @@ async function revisarConWorkersAI(env, config, imagen, texto) {
         ],
       },
     ],
-    max_tokens: 900,
+    max_tokens: maxTokens,
     temperature: 0.4,
   });
   const salida =
     typeof r === 'string' ? r : r?.response ?? r?.result?.response ?? r?.choices?.[0]?.message?.content ?? '';
   return { texto: String(salida).trim(), motor: modelo };
+}
+
+// ---------- API: cámara en vivo ----------
+
+const SISTEMA_VIVO = `Eres el maestro de dibujo de Sky y estás viendo EN VIVO, por la cámara de su celular, cómo dibuja en papel.
+Le das UN solo consejo inmediato sobre lo que ves en este momento: cómo va el trazo, la proporción, la presión, la postura de la mano o lo que siga del ejercicio.
+Reglas:
+- Español de México, tono de compa que sabe dibujar, sin groserías.
+- Máximo 2 frases cortas, directo, nada de saludos ni formato.
+- Si va bien, dilo en corto y dile qué sigue.
+- Si no se ve la hoja o la imagen está borrosa u oscura, dilo en una frase (por ejemplo, que acerque o enfoque la cámara).
+- No repitas los consejos que ya le diste.`;
+
+async function vistazoEnVivo(request, env) {
+  let cuerpo;
+  try {
+    cuerpo = await request.json();
+  } catch {
+    return json({ error: 'La petición no trae JSON válido.' }, 400);
+  }
+  const imagen = parsearImagen(cuerpo?.imagen);
+  if (!imagen) return json({ error: 'No llegó la imagen de la cámara.' }, 400);
+  if (imagen.bytes > MAX_IMAGEN_BYTES) return json({ error: 'La imagen pesa demasiado.' }, 413);
+
+  const config = await leerConfig(env);
+  const limite = Number(config.limite_vivo_dia || 400);
+  const hoy = new Date().toISOString().slice(0, 10);
+  const fila = await env.DB.prepare('SELECT n FROM vivo_conteo WHERE fecha = ?').bind(hoy).first();
+  if (limite > 0 && fila && fila.n >= limite) {
+    return json({ error: `Ya se usaron los ${limite} vistazos en vivo de hoy. Mañana se reinicia.` }, 429);
+  }
+
+  const ejercicio =
+    typeof cuerpo.ejercicio === 'string'
+      ? await env.DB.prepare('SELECT titulo, objetivo, criterios FROM ejercicios WHERE id = ?').bind(cuerpo.ejercicio).first()
+      : null;
+  const previos = Array.isArray(cuerpo.previos) ? cuerpo.previos.filter((x) => typeof x === 'string').slice(-4) : [];
+  const partes = [];
+  if (ejercicio) partes.push(`Está haciendo el ejercicio "${ejercicio.titulo}": ${ejercicio.objetivo} Fíjate en: ${ejercicio.criterios}`);
+  else partes.push('Está dibujando libre.');
+  if (previos.length) partes.push('Consejos que ya le diste (no los repitas):\n- ' + previos.map((p) => p.slice(0, 300)).join('\n- '));
+  partes.push('¿Qué le dices ahorita?');
+  const texto = partes.join('\n');
+
+  let r;
+  try {
+    r = env.ANTHROPIC_API_KEY
+      ? await revisarConClaude(env, imagen, texto, SISTEMA_VIVO, config.modelo_claude_vivo || 'claude-haiku-5-5', 1200)
+      : await revisarConWorkersAI(env, config, imagen, texto, SISTEMA_VIVO, 160);
+  } catch (err) {
+    console.error(err);
+    return json({ error: 'La IA no pudo ver la imagen: ' + (err?.message || String(err)) }, 502);
+  }
+  await env.DB.prepare(
+    'INSERT INTO vivo_conteo (fecha, n) VALUES (?, 1) ON CONFLICT(fecha) DO UPDATE SET n = n + 1'
+  )
+    .bind(hoy)
+    .run();
+  return json({ consejo: r.texto || 'Sigue así, no alcancé a ver nada que corregir.', motor: r.motor });
 }
 
 // ---------- utilidades ----------

@@ -4,7 +4,7 @@
 //   2) Editar este archivo y subir SEED_VERSION: al siguiente deploy se actualizan las filas con el mismo id.
 // Las filas que se agregan directo en D1 no se borran al resembrar.
 
-export const SEED_VERSION = 1;
+export const SEED_VERSION = 2;
 
 export const ESQUEMA = [
   `CREATE TABLE IF NOT EXISTS config (
@@ -58,6 +58,10 @@ export const ESQUEMA = [
      comentario TEXT NOT NULL
    )`,
   `CREATE INDEX IF NOT EXISTS idx_revisiones_fecha ON revisiones (fecha)`,
+  `CREATE TABLE IF NOT EXISTS vivo_conteo (
+     fecha TEXT PRIMARY KEY,
+     n INTEGER NOT NULL DEFAULT 0
+   )`,
 ];
 
 // Valores de config. Al resembrar NO se pisan los que ya existen (para no borrar cambios hechos en vivo).
@@ -67,6 +71,10 @@ export const CONFIG = {
   limite_revisiones_dia: '40',
   modelo_claude: 'claude-sonnet-5-5',
   modelo_workers_ai: '@cf/meta/llama-4-scout-17b-16e-instruct',
+  // Cámara en vivo: cada cuántos segundos mira la hoja, modelo y límite diario
+  intervalo_vivo_seg: '20',
+  modelo_claude_vivo: 'claude-haiku-5-5',
+  limite_vivo_dia: '400',
 };
 
 export const ACORDES = [

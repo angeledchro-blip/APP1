@@ -88,7 +88,6 @@ function cambiarSub(nombre) {
 const afinador = {
   estab: new Estabilizador(5),
   modo: 'auto',
-  amplitud: 0,
   color: 'apagado',
   ultimoTono: 0,
 
@@ -131,9 +130,10 @@ const afinador = {
     const ahora = d.t;
     if (!d.tono || d.tono.claridad < 0.85) {
       if (ahora - this.ultimoTono > 600 && this.color !== 'apagado') {
-        this.amplitud = 0;
         this.color = 'apagado';
+        this.afinadaCuadros = 0;
         this.estab.limpiar();
+        $('#af-flecha').dataset.dir = '';
         $('#af-indicacion').textContent = 'Toca una cuerda y déjala sonar.';
       }
       return;
@@ -154,58 +154,114 @@ const afinador = {
     }
 
     let cents;
+    const flecha = $('#af-flecha');
     if (objetivo) {
       cents = (midi - objetivo.midi) * 100;
       const n2 = nota(objetivo.midi);
       $('#af-objetivo').textContent = `Afinando la ${objetivo.num}ª cuerda: ${n2.letra} (${objetivo.nombre})`;
       const abs = Math.abs(cents);
       let txt;
-      if (abs <= 5) txt = '¡Afinada! Pasa a la siguiente cuerda.';
-      else if (cents < 0) txt = abs > 50 ? 'Muy baja: aprieta la clavija.' : 'Un poco baja: aprieta tantito la clavija.';
-      else txt = abs > 50 ? 'Muy alta: afloja la clavija.' : 'Un poco alta: afloja tantito la clavija.';
+      if (abs <= 5) {
+        txt = '¡Afinada! Pasa a la siguiente cuerda.';
+        flecha.dataset.dir = 'ok';
+      } else if (cents < 0) {
+        txt = abs > 50 ? 'Muy baja: aprieta la clavija.' : 'Un poco baja: aprieta tantito la clavija.';
+        flecha.dataset.dir = 'subir';
+      } else {
+        txt = abs > 50 ? 'Muy alta: afloja la clavija.' : 'Un poco alta: afloja tantito la clavija.';
+        flecha.dataset.dir = 'bajar';
+      }
       $('#af-indicacion').textContent = txt;
+      // Marca la cuerda como afinada si se sostiene afinada ~1 segundo
+      this.afinadaCuadros = abs <= 5 && this.cuerdaActual === objetivo.num ? this.afinadaCuadros + 1 : 0;
+      this.cuerdaActual = objetivo.num;
+      if (this.afinadaCuadros === 28) {
+        document.querySelector(`[data-cuerda="${objetivo.num}"]`)?.classList.add('lista');
+      }
     } else {
       cents = (midi - Math.round(midi)) * 100;
       $('#af-objetivo').textContent = 'Nota que suena';
       $('#af-indicacion').textContent = Math.abs(cents) <= 5 ? 'Nota afinada.' : 'Está entre dos notas.';
+      flecha.dataset.dir = Math.abs(cents) <= 5 ? 'ok' : cents < 0 ? 'subir' : 'bajar';
     }
     const signo = cents > 0 ? '+' : cents < 0 ? '−' : '';
     $('#af-cents').textContent = Math.abs(cents) > 99 ? `${signo}${(Math.abs(cents) / 100).toFixed(1)} semitonos` : `${signo}${Math.abs(Math.round(cents))} cents`;
-    this.amplitud = Math.min(1, Math.abs(cents) / 50);
+    this.objetivoCents = Math.max(-50, Math.min(50, cents));
     this.color = Math.abs(cents) <= 5 ? 'afinada' : 'desafinada';
   },
 
-  // La cuerda vibra más entre más desafinada está; afinada queda recta.
-  dibujar(t) {
+  // Medidor de aguja: la zona verde del centro es "afinada".
+  aguja: 0,
+  objetivoCents: 0,
+  afinadaCuadros: 0,
+  cuerdaActual: null,
+
+  dibujar() {
     const c = this.ctx2d;
     const W = this.canvas.width;
     const H = this.canvas.height;
     if (!W || !H) return;
-    c.clearRect(0, 0, W, H);
-    const color = this.colores[this.color];
     const dpr = window.devicePixelRatio || 1;
-    const A = this.amplitud * (H * 0.36);
-    const velocidad = 0.012 + this.amplitud * 0.02;
-    const fase = reducirMovimiento() ? 1 : Math.sin(t * velocidad);
-    c.lineWidth = 3 * dpr;
+    const meta = this.color === 'apagado' ? 0 : this.objetivoCents;
+    this.aguja = reducirMovimiento() ? meta : this.aguja + (meta - this.aguja) * 0.22;
+
+    c.clearRect(0, 0, W, H);
+    const cx = W / 2;
+    const cy = H - 14 * dpr;
+    const R = Math.min(W / 2 - 24 * dpr, H - 34 * dpr);
+    const ang = (ct) => ((-90 + ct * 1.2) * Math.PI) / 180; // ±50 cents = ±60°
+
+    // arco base
+    c.lineCap = 'butt';
+    c.lineWidth = 16 * dpr;
+    c.strokeStyle = this.colores.apagado;
+    c.beginPath();
+    c.arc(cx, cy, R, ang(-50), ang(50));
+    c.stroke();
+    // zona afinada (±5 cents)
+    c.strokeStyle = this.colores.afinada;
+    c.beginPath();
+    c.arc(cx, cy, R, ang(-5), ang(5));
+    c.stroke();
+
+    // marcas cada 10 cents y etiquetas
+    c.strokeStyle = this.colores.puntas;
+    c.fillStyle = this.colores.puntas;
+    c.font = `${12 * dpr}px system-ui, sans-serif`;
+    c.textAlign = 'center';
+    for (let ct = -50; ct <= 50; ct += 10) {
+      const a = ang(ct);
+      const largo = ct % 50 === 0 || ct === 0 ? 16 : 9;
+      c.lineWidth = (ct === 0 ? 3 : 1.5) * dpr;
+      c.beginPath();
+      c.moveTo(cx + Math.cos(a) * (R - 12 * dpr), cy + Math.sin(a) * (R - 12 * dpr));
+      c.lineTo(cx + Math.cos(a) * (R - (12 + largo) * dpr), cy + Math.sin(a) * (R - (12 + largo) * dpr));
+      c.stroke();
+    }
+    const etiqueta = (txt, ct) => {
+      const a = ang(ct);
+      c.fillText(txt, cx + Math.cos(a) * (R - 42 * dpr), cy + Math.sin(a) * (R - 42 * dpr) + 4 * dpr);
+    };
+    etiqueta('baja', -40);
+    etiqueta('alta', 40);
+
+    // aguja
+    const color = this.colores[this.color];
+    const a = ang(this.aguja);
+    c.lineCap = 'round';
+    c.lineWidth = 4 * dpr;
     c.strokeStyle = color;
     c.shadowColor = this.color === 'afinada' ? color : 'transparent';
     c.shadowBlur = this.color === 'afinada' ? 14 * dpr : 0;
     c.beginPath();
-    const pasos = 80;
-    for (let i = 0; i <= pasos; i++) {
-      const x = (i / pasos) * W;
-      const env = Math.sin((Math.PI * i) / pasos);
-      const y = H / 2 + A * env * fase;
-      if (i === 0) c.moveTo(x, y);
-      else c.lineTo(x, y);
-    }
+    c.moveTo(cx, cy);
+    c.lineTo(cx + Math.cos(a) * (R + 6 * dpr), cy + Math.sin(a) * (R + 6 * dpr));
     c.stroke();
-    // marcas de las puntas (cejuela y puente)
     c.shadowBlur = 0;
-    c.fillStyle = this.colores.puntas;
-    c.fillRect(0, H / 2 - 10 * dpr, 4 * dpr, 20 * dpr);
-    c.fillRect(W - 4 * dpr, H / 2 - 10 * dpr, 4 * dpr, 20 * dpr);
+    c.fillStyle = color;
+    c.beginPath();
+    c.arc(cx, cy, 8 * dpr, 0, Math.PI * 2);
+    c.fill();
   },
 };
 

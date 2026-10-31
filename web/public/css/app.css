@@ -294,11 +294,82 @@ textarea {
   margin-top: 18px;
 }
 
-.cuerda-viva {
+.medidor-aguja {
   display: block;
   width: 100%;
-  height: 140px;
-  margin-top: 6px;
+  height: 190px;
+  margin-top: 4px;
+}
+
+.guia-afinar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 56px;
+  margin-top: 2px;
+}
+
+.flecha {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.flecha[data-dir=''] {
+  display: none;
+}
+
+.flecha[data-dir='subir']::before,
+.flecha[data-dir='bajar']::before {
+  content: '↑';
+}
+
+.flecha[data-dir='bajar']::before {
+  content: '↓';
+}
+
+.flecha[data-dir='ok']::before {
+  content: '✓';
+}
+
+.flecha[data-dir='subir'],
+.flecha[data-dir='bajar'] {
+  background: var(--ambar);
+  color: var(--grafito);
+  animation: empuje 0.9s ease-in-out infinite;
+}
+
+.flecha[data-dir='bajar'] {
+  animation-name: empuje-abajo;
+}
+
+.flecha[data-dir='ok'] {
+  background: var(--menta);
+  color: var(--grafito);
+}
+
+@keyframes empuje {
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+@keyframes empuje-abajo {
+  50% {
+    transform: translateY(5px);
+  }
+}
+
+.guia-afinar .indicacion {
+  margin: 0;
+  text-align: left;
 }
 
 .cents {
@@ -343,6 +414,20 @@ textarea {
 .selector-cuerdas button[aria-pressed='true'] {
   border-color: var(--lila);
   color: var(--lila);
+}
+
+.selector-cuerdas button.lista {
+  border-color: var(--menta);
+  position: relative;
+}
+
+.selector-cuerdas button.lista::after {
+  content: '✓';
+  position: absolute;
+  top: 2px;
+  right: 5px;
+  font-size: 11px;
+  color: var(--menta);
 }
 
 /* ---------- Práctica de notas ---------- */
@@ -611,6 +696,60 @@ textarea {
   padding: 24px;
   color: var(--papel-2);
   text-align: center;
+}
+
+.vivo {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(31, 33, 40, 0.86);
+  backdrop-filter: blur(4px);
+}
+
+.vivo-estado {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--papel-2);
+}
+
+.vivo-estado::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--grafito-3);
+}
+
+.vivo-estado[data-activo='true']::before {
+  background: #f06a6a;
+  animation: latido 1.4s ease-in-out infinite;
+}
+
+.vivo-texto {
+  margin: 4px 0 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.historial {
+  margin: 16px 0 0;
+  padding: 0 0 0 20px;
+  color: var(--papel-2);
+  font-size: 14px;
+}
+
+.historial li + li {
+  margin-top: 6px;
+}
+
+.historial li:first-child {
+  color: var(--papel);
 }
 
 .cargando {

@@ -42,14 +42,17 @@
 
         <!-- Afinador -->
         <div id="sub-afinador" class="subvista">
-          <div class="lectura">
+          <div class="lectura lectura-media">
             <span id="af-nota" class="nota-grande">–</span>
             <span id="af-solfeo" class="solfeo"></span>
           </div>
           <p id="af-objetivo" class="objetivo">Toca una cuerda al aire</p>
-          <canvas id="af-cuerda" class="cuerda-viva" aria-hidden="true"></canvas>
+          <canvas id="af-cuerda" class="medidor-aguja" aria-hidden="true"></canvas>
           <p id="af-cents" class="cents"></p>
-          <p id="af-indicacion" class="indicacion" aria-live="polite"></p>
+          <div class="guia-afinar">
+            <span id="af-flecha" class="flecha" data-dir="" aria-hidden="true"></span>
+            <p id="af-indicacion" class="indicacion" aria-live="polite"></p>
+          </div>
           <div class="selector-cuerdas" role="group" aria-label="Cuerda a afinar">
             <button data-cuerda="auto" aria-pressed="true">Auto</button>
             <button data-cuerda="6" aria-pressed="false">6ª<small>E</small></button>
@@ -123,8 +126,12 @@
           <video id="di-video" playsinline muted autoplay hidden></video>
           <img id="di-foto" alt="Foto de tu dibujo" hidden />
           <p id="di-vacio" class="camara-vacia">
-            Cuando termines el ejercicio, abre la cámara y toma la foto de la hoja completa: de frente, con buena luz y sin sombra encima.
+            Abre la cámara y apunta a tu hoja mientras dibujas (recarga el cel en algo para que no se mueva). Te voy diciendo qué corregir en vivo.
           </p>
+          <div id="di-vivo" class="vivo" hidden>
+            <span id="di-vivo-estado" class="vivo-estado"></span>
+            <p id="di-vivo-texto" class="vivo-texto" aria-live="polite"></p>
+          </div>
           <p id="di-cargando" class="cargando" hidden>Revisando tu dibujo…</p>
         </div>
 
@@ -135,11 +142,14 @@
 
         <div class="acciones">
           <button id="di-abrir" class="primario">Abrir cámara</button>
-          <button id="di-tomar" class="primario" hidden>Tomar foto</button>
+          <button id="di-pausar" hidden>Pausar en vivo</button>
+          <button id="di-tomar" class="primario" hidden>Revisión completa</button>
           <button id="di-revisar" class="primario" hidden>Revisar mi dibujo</button>
-          <button id="di-otra" hidden>Tomar otra</button>
+          <button id="di-otra" hidden>Volver a la cámara</button>
           <button id="di-cerrar" hidden>Cerrar cámara</button>
         </div>
+
+        <ol id="di-historial" class="historial" hidden></ol>
 
         <div id="di-resultado" class="resultado" aria-live="polite" hidden></div>
       </section>

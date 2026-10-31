@@ -81,6 +81,7 @@ function aplicar(c) {
   m.textContent = c.mensaje || '';
   m.hidden = !c.mensaje;
   guitarra.actualizar(c);
+  dibujo.configurar(c);
   dibujo.actualizar(c.ejercicios || []);
 }
 
