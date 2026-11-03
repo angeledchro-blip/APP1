@@ -18,8 +18,8 @@ android {
         applicationId = "com.sky.practica"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "1.2"
         buildConfigField("String", "WEB_URL", "\"$webUrl\"")
     }
 
@@ -58,4 +58,9 @@ kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
     }
+}
+
+dependencies {
+    // FileProvider: le pasa a la cámara dónde guardar la foto
+    implementation("androidx.core:core:1.13.1")
 }

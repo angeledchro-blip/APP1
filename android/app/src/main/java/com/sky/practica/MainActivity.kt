@@ -4,19 +4,21 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.speech.tts.TextToSpeech
+import android.provider.MediaStore
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowManager
 import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -24,19 +26,21 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
-import java.util.Locale
+import androidx.core.content.FileProvider
+import java.io.File
 
 /**
- * La app es un "cascarón": abre la web de Cloudflare y le presta la cámara y el micrófono.
- * Todo lo demás (ejercicios, acordes, afinador, correcciones) vive en la web, así que
- * los cambios se ven en la app sin reinstalar.
+ * La app es un "cascarón": abre la web de Cloudflare, le presta el micrófono y le abre la cámara
+ * (o la galería) del teléfono para tomarle foto a los dibujos. Todo lo demás (ejercicios, acordes,
+ * afinador, correcciones) vive en la web, así que los cambios se ven en la app sin reinstalar.
  */
 class MainActivity : Activity() {
 
     private lateinit var web: WebView
     private var permisoPendiente: PermissionRequest? = null
-    private var voz: TextToSpeech? = null
-    private var vozLista = false
+    private var archivoPendiente: ValueCallback<Array<Uri>>? = null
+    private var fotoPendiente: File? = null
+    private var fotoUri: Uri? = null
     private val hostWeb: String? by lazy { Uri.parse(BuildConfig.WEB_URL).host }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -82,21 +86,39 @@ class MainActivity : Activity() {
             }
         }
 
-        // Voz del teléfono para leer en voz alta los consejos de dibujo (la web la usa como window.AndroidVoz)
-        voz = TextToSpeech(this) { estado ->
-            if (estado == TextToSpeech.SUCCESS) {
-                val r = voz?.setLanguage(Locale.forLanguageTag("es-MX"))
-                if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    voz?.setLanguage(Locale.forLanguageTag("es"))
-                }
-                vozLista = true
-            }
-        }
-        web.addJavascriptInterface(PuenteVoz(), "AndroidVoz")
+        // La web pregunta la versión para saber que ya puede abrir la cámara del teléfono
+        web.addJavascriptInterface(PuenteApp(), "AndroidApp")
 
         web.webChromeClient = object : WebChromeClient() {
             override fun onPermissionRequest(request: PermissionRequest) {
                 runOnUiThread { pedirPermisos(request) }
+            }
+
+            // <input type="file">: con capture abre la cámara del teléfono; sin capture, la galería
+            override fun onShowFileChooser(
+                webView: WebView,
+                filePathCallback: ValueCallback<Array<Uri>>,
+                fileChooserParams: WebChromeClient.FileChooserParams
+            ): Boolean {
+                archivoPendiente?.onReceiveValue(null)
+                archivoPendiente = filePathCallback
+                fotoPendiente = null
+                fotoUri = null
+                val intentos = buildList {
+                    if (fileChooserParams.isCaptureEnabled) intentCamara()?.let { add(it) }
+                    add(intentGaleria())
+                }
+                for (intent in intentos) {
+                    try {
+                        startActivityForResult(intent, CODIGO_ARCHIVO)
+                        return true
+                    } catch (e: ActivityNotFoundException) {
+                        fotoPendiente = null
+                        fotoUri = null
+                    }
+                }
+                archivoPendiente = null
+                return false
             }
         }
 
@@ -107,16 +129,66 @@ class MainActivity : Activity() {
         }
     }
 
-    // La web pide cámara o micrófono: primero se pide el permiso de Android y luego se le da a la web.
+    // La cámara guarda la foto completa en la caché de la app (no llena la galería)
+    private fun intentCamara(): Intent? {
+        return try {
+            val carpeta = File(cacheDir, "fotos").apply { mkdirs() }
+            carpeta.listFiles()?.forEach { it.delete() }
+            val archivo = File(carpeta, "dibujo_${System.currentTimeMillis()}.jpg")
+            val uri = FileProvider.getUriForFile(this, "$packageName.archivos", archivo)
+            fotoPendiente = archivo
+            fotoUri = uri
+            Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
+                putExtra(MediaStore.EXTRA_OUTPUT, uri)
+                clipData = ClipData.newRawUri("foto", uri)
+                addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun intentGaleria(): Intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+        addCategory(Intent.CATEGORY_OPENABLE)
+        type = "image/*"
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != CODIGO_ARCHIVO) return
+        val callback = archivoPendiente ?: return
+        archivoPendiente = null
+        val archivo = fotoPendiente
+        val uri = fotoUri
+        fotoPendiente = null
+        fotoUri = null
+        val resultado: Array<Uri>? = when {
+            resultCode != RESULT_OK -> null
+            archivo != null && uri != null -> if (archivo.length() > 0) arrayOf(uri) else null
+            else -> data?.data?.let { arrayOf(it) }
+        }
+        callback.onReceiveValue(resultado)
+    }
+
+    inner class PuenteApp {
+        @JavascriptInterface
+        fun version(): Int = BuildConfig.VERSION_CODE
+    }
+
+    // La web pide el micrófono: primero se pide el permiso de Android y luego se le da a la web.
     private fun pedirPermisos(request: PermissionRequest) {
         if (request.origin.host != hostWeb) {
             request.deny()
             return
         }
         val necesarios = request.resources.mapNotNull { permisoAndroid(it) }.distinct()
+        if (necesarios.isEmpty()) {
+            request.deny()
+            return
+        }
         val faltan = necesarios.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
         if (faltan.isEmpty()) {
-            request.grant(request.resources)
+            request.grant(request.resources.filter { permisoAndroid(it) != null }.toTypedArray())
         } else {
             permisoPendiente?.deny()
             permisoPendiente = request
@@ -136,20 +208,7 @@ class MainActivity : Activity() {
         if (concedidos.isEmpty()) request.deny() else request.grant(concedidos.toTypedArray())
     }
 
-    inner class PuenteVoz {
-        @JavascriptInterface
-        fun hablar(texto: String) {
-            if (vozLista) voz?.speak(texto.take(400), TextToSpeech.QUEUE_FLUSH, null, "practica")
-        }
-
-        @JavascriptInterface
-        fun callar() {
-            voz?.stop()
-        }
-    }
-
     private fun permisoAndroid(recurso: String): String? = when (recurso) {
-        PermissionRequest.RESOURCE_VIDEO_CAPTURE -> Manifest.permission.CAMERA
         PermissionRequest.RESOURCE_AUDIO_CAPTURE -> Manifest.permission.RECORD_AUDIO
         else -> null
     }
@@ -211,13 +270,15 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
-        voz?.shutdown()
+        archivoPendiente?.onReceiveValue(null)
+        archivoPendiente = null
         web.destroy()
         super.onDestroy()
     }
 
     companion object {
         private const val CODIGO_PERMISOS = 7
+        private const val CODIGO_ARCHIVO = 8
         private val FONDO = Color.parseColor("#1F2128")
     }
 }

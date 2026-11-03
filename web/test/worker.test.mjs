@@ -155,34 +155,6 @@ test('al subir SEED_VERSION no pisa el mensaje editado en vivo', async () => {
   assert.equal(d.contenido.mensajes.dibujo, 'editado');
 });
 
-test('cámara en vivo: da un consejo corto, no repite y respeta el límite', async () => {
-  const w = await nuevoWorker();
-  let recibido = null;
-  const env = {
-    DB: d1Falso(),
-    AI: {
-      run: async (modelo, entrada) => {
-        recibido = entrada;
-        return { response: 'Suelta la muñeca y traza desde el hombro.' };
-      },
-    },
-  };
-  const c = await (await pedir(w, env, '/api/contenido')).json();
-  assert.equal(c.contenido.intervaloVivo, 10);
-  const r = await pedir(w, env, '/api/dibujo/vivo', { imagen: IMAGEN, ejercicio: 'lineas-hombro', previos: ['Consejo viejo'] });
-  const d = await r.json();
-  assert.equal(r.status, 200, JSON.stringify(d));
-  assert.equal(d.consejo, 'Suelta la muñeca y traza desde el hombro.');
-  assert.equal(recibido.max_tokens, 120);
-  assert.match(recibido.messages[0].content, /EN VIVO/);
-  const texto = recibido.messages[1].content.find((p) => p.type === 'text').text;
-  assert.match(texto, /Consejo viejo/);
-  assert.match(texto, /Líneas rectas desde el hombro/);
-  env.DB._db.prepare("UPDATE config SET valor = '1' WHERE clave = 'limite_vivo_dia'").run();
-  const r2 = await pedir(w, env, '/api/dibujo/vivo', { imagen: IMAGEN });
-  assert.equal(r2.status, 429);
-});
-
 test('camino de guitarra y progreso: niveles en orden y se guarda el avance', async () => {
   const w = await nuevoWorker();
   const env = { DB: d1Falso() };

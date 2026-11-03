@@ -58,10 +58,6 @@ export const ESQUEMA = [
      comentario TEXT NOT NULL
    )`,
   `CREATE INDEX IF NOT EXISTS idx_revisiones_fecha ON revisiones (fecha)`,
-  `CREATE TABLE IF NOT EXISTS vivo_conteo (
-     fecha TEXT PRIMARY KEY,
-     n INTEGER NOT NULL DEFAULT 0
-   )`,
   `CREATE TABLE IF NOT EXISTS niveles (
      id TEXT PRIMARY KEY,
      orden INTEGER NOT NULL,
@@ -87,16 +83,12 @@ export const CONFIG = {
   mensaje_guitarra:
     'Empieza en Camino: cada nivel te enseña acordes nuevos y los desbloqueas pasando su reto. Primero afina la guitarra.',
   mensaje_dibujo:
-    'Ve en orden: cada ejercicio se aprueba con 3/5 o más en la revisión y desbloquea el siguiente. Dale Empezar sesión y te corrijo en vivo.',
+    'Ve en orden: haz el ejercicio, tómale foto a tu hoja y te digo qué corregir. Con 3/5 o más se aprueba y se abre el siguiente.',
   // Calificación mínima (de 5) para aprobar un ejercicio de dibujo
   aprobar_dibujo: '3',
   limite_revisiones_dia: '40',
   modelo_claude: 'claude-sonnet-5-5',
   modelo_workers_ai: '@cf/meta/llama-4-scout-17b-16e-instruct',
-  // Cámara en vivo: cada cuántos segundos mira la hoja, modelo y límite diario
-  intervalo_vivo_seg: '10',
-  modelo_claude_vivo: 'claude-haiku-5-5',
-  limite_vivo_dia: '400',
 };
 
 export const ACORDES = [

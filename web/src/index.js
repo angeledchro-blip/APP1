@@ -1,4 +1,5 @@
 import { SEED_VERSION, ESQUEMA, CONFIG, ACORDES, RUTINAS, LECCIONES, EJERCICIOS, NIVELES } from './seed.js';
+import { IMAGEN_PRUEBA } from './diagnostico.js'; // TEMPORAL
 
 const MAX_IMAGEN_BYTES = 6 * 1024 * 1024;
 const TIPOS_IMAGEN = ['image/jpeg', 'image/png', 'image/webp'];
@@ -17,8 +18,8 @@ export default {
       if (url.pathname === '/api/dibujo/revisar' && request.method === 'POST') {
         return await revisarDibujo(request, env);
       }
-      if (url.pathname === '/api/dibujo/vivo' && request.method === 'POST') {
-        return await vistazoEnVivo(request, env);
+      if (url.pathname === '/api/diagnostico-ia' && request.method === 'GET') {
+        return await diagnosticoIA(env); // TEMPORAL
       }
       if (url.pathname === '/api/progreso' && request.method === 'POST') {
         return await guardarProgreso(request, env);
@@ -162,7 +163,6 @@ async function contenido(env) {
           guitarra: config.mensaje_guitarra || '',
           dibujo: config.mensaje_dibujo || '',
         },
-        intervaloVivo: Math.max(6, Number(config.intervalo_vivo_seg || 10)),
         aprobarDibujo: Number(config.aprobar_dibujo || 3),
         niveles: niveles.results,
         progreso: prog,
@@ -406,70 +406,21 @@ async function revisarConWorkersAI(env, config, imagen, texto, sistema, maxToken
   return { texto: String(salida).trim(), motor: modelo };
 }
 
-// ---------- API: cámara en vivo ----------
-
-const SISTEMA_VIVO = `Eres el maestro de dibujo de Sky y estás viendo EN VIVO, por la cámara de su celular, cómo dibuja en papel.
-Sky es principiante: le das UN solo consejo inmediato sobre lo que ves en este momento, empezando por lo más básico del ejercicio (cómo va el trazo, la proporción, la presión, la postura de la mano o qué sigue en las instrucciones). Si lo está haciendo bien, díselo para que agarre confianza.
-Reglas:
-- Español de México, tono de compa que sabe dibujar, sin groserías.
-- Máximo 2 frases cortas, directo, nada de saludos ni formato.
-- Si va bien, dilo en corto y dile qué sigue.
-- Si no se ve la hoja o la imagen está borrosa u oscura, dilo en una frase (por ejemplo, que acerque o enfoque la cámara).
-- No repitas los consejos que ya le diste.`;
-
-async function vistazoEnVivo(request, env) {
-  let cuerpo;
-  try {
-    cuerpo = await request.json();
-  } catch {
-    return json({ error: 'La petición no trae JSON válido.' }, 400);
-  }
-  const imagen = parsearImagen(cuerpo?.imagen);
-  if (!imagen) return json({ error: 'No llegó la imagen de la cámara.' }, 400);
-  if (imagen.bytes > MAX_IMAGEN_BYTES) return json({ error: 'La imagen pesa demasiado.' }, 413);
-
+// TEMPORAL: prueba la revisión con la IA real usando una foto de prueba (no guarda nada)
+async function diagnosticoIA(env) {
   const config = await leerConfig(env);
-  const limite = Number(config.limite_vivo_dia || 400);
-  const hoy = new Date().toISOString().slice(0, 10);
-  const fila = await env.DB.prepare('SELECT n FROM vivo_conteo WHERE fecha = ?').bind(hoy).first();
-  if (limite > 0 && fila && fila.n >= limite) {
-    return json({ error: `Ya se usaron los ${limite} vistazos en vivo de hoy. Mañana se reinicia.` }, 429);
-  }
-
-  const ejercicio =
-    typeof cuerpo.ejercicio === 'string'
-      ? await env.DB.prepare('SELECT titulo, objetivo, instrucciones, criterios FROM ejercicios WHERE id = ?').bind(cuerpo.ejercicio).first()
-      : null;
-  const previos = Array.isArray(cuerpo.previos) ? cuerpo.previos.filter((x) => typeof x === 'string').slice(-4) : [];
-  const partes = [];
-  if (ejercicio) {
-    partes.push(
-      `Está haciendo el ejercicio "${ejercicio.titulo}": ${ejercicio.objetivo}`,
-      `Instrucciones: ${ejercicio.instrucciones}`,
-      `Fíjate en: ${ejercicio.criterios}`
-    );
-  }
-  if (typeof cuerpo.minuto === 'number') partes.push(`Lleva ${Math.round(cuerpo.minuto)} minuto(s) de sesión.`);
-  else partes.push('Está dibujando libre.');
-  if (previos.length) partes.push('Consejos que ya le diste (no los repitas):\n- ' + previos.map((p) => p.slice(0, 300)).join('\n- '));
-  partes.push('¿Qué le dices ahorita?');
-  const texto = partes.join('\n');
-
-  let r;
+  const imagen = parsearImagen(IMAGEN_PRUEBA);
+  const ejercicio = await env.DB.prepare('SELECT * FROM ejercicios WHERE id = ?').bind('lineas-hombro').first();
+  const texto = armarPeticion(ejercicio, '', []);
+  const inicio = Date.now();
   try {
-    r = env.ANTHROPIC_API_KEY
-      ? await revisarConClaude(env, imagen, texto, SISTEMA_VIVO, config.modelo_claude_vivo || 'claude-haiku-5-5', 1200)
-      : await revisarConWorkersAI(env, config, imagen, texto, SISTEMA_VIVO, 120);
+    const r = env.ANTHROPIC_API_KEY
+      ? await revisarConClaude(env, imagen, texto, SISTEMA, config.modelo_claude || 'claude-sonnet-5-5', 3000)
+      : await revisarConWorkersAI(env, config, imagen, texto, SISTEMA, 900);
+    return json({ ok: Boolean(r.texto), motor: r.motor, ms: Date.now() - inicio, nivel: leerCalificacion(r.texto), texto: r.texto });
   } catch (err) {
-    console.error(err);
-    return json({ error: 'La IA no pudo ver la imagen: ' + (err?.message || String(err)) }, 502);
+    return json({ ok: false, ms: Date.now() - inicio, error: err?.message || String(err) });
   }
-  await env.DB.prepare(
-    'INSERT INTO vivo_conteo (fecha, n) VALUES (?, 1) ON CONFLICT(fecha) DO UPDATE SET n = n + 1'
-  )
-    .bind(hoy)
-    .run();
-  return json({ consejo: r.texto || 'Sigue así, no alcancé a ver nada que corregir.', motor: r.motor });
 }
 
 // ---------- utilidades ----------

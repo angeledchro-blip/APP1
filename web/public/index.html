@@ -202,14 +202,13 @@
           <video id="di-video" playsinline muted autoplay hidden></video>
           <img id="di-foto" alt="Foto de tu dibujo" hidden />
           <p id="di-vacio" class="camara-vacia">
-            Recarga el cel en algo para que la cámara apunte fija a tu hoja y dale Empezar sesión. Mientras dibujas te voy diciendo qué corregir, en pantalla y en voz alta; al final reviso tu hoja y te califico.
+            Cuando termines el ejercicio, tómale foto a tu hoja completa: de frente, con buena luz y sin sombra encima. Te digo qué corregir y te califico.
           </p>
-          <div id="di-vivo" class="vivo" hidden>
-            <span id="di-vivo-estado" class="vivo-estado"></span>
-            <p id="di-vivo-texto" class="vivo-texto" aria-live="polite"></p>
-          </div>
           <p id="di-cargando" class="cargando" hidden>Revisando tu dibujo…</p>
         </div>
+
+        <input id="di-archivo-camara" type="file" accept="image/*" capture="environment" hidden />
+        <input id="di-archivo-galeria" type="file" accept="image/*" hidden />
 
         <label id="di-nota-campo" class="campo" hidden>
           <span>¿Algo en específico que quieras que revise? (opcional)</span>
@@ -217,17 +216,14 @@
         </label>
 
         <div class="acciones">
-          <button id="di-abrir" class="primario">Empezar sesión</button>
-          <button id="di-tomar" class="primario" hidden>Terminé: revisar</button>
-          <button id="di-pausar" hidden>Pausar consejos</button>
-          <button id="di-voz" aria-pressed="true" hidden>🔊 Voz: sí</button>
+          <button id="di-tomar" class="primario">Tomar foto</button>
+          <button id="di-galeria">Elegir de la galería</button>
+          <button id="di-disparar" class="primario" hidden>Tomar foto</button>
+          <button id="di-cancelar" hidden>Cancelar</button>
           <button id="di-revisar" class="primario" hidden>Revisar mi dibujo</button>
           <button id="di-siguiente" class="primario" hidden>Siguiente ejercicio</button>
-          <button id="di-otra" hidden>Otra sesión</button>
-          <button id="di-cerrar" hidden>Cancelar sesión</button>
+          <button id="di-otra" hidden>Tomar otra</button>
         </div>
-
-        <ol id="di-historial" class="historial" hidden></ol>
 
         <div id="di-resultado" class="resultado" aria-live="polite" hidden></div>
       </section>
