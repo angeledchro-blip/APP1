@@ -1,5 +1,4 @@
 import { SEED_VERSION, ESQUEMA, CONFIG, ACORDES, RUTINAS, LECCIONES, EJERCICIOS, NIVELES } from './seed.js';
-import { IMAGEN_PRUEBA } from './diagnostico.js'; // TEMPORAL
 
 const MAX_IMAGEN_BYTES = 6 * 1024 * 1024;
 const TIPOS_IMAGEN = ['image/jpeg', 'image/png', 'image/webp'];
@@ -17,9 +16,6 @@ export default {
       }
       if (url.pathname === '/api/dibujo/revisar' && request.method === 'POST') {
         return await revisarDibujo(request, env);
-      }
-      if (url.pathname === '/api/diagnostico-ia' && request.method === 'GET') {
-        return await diagnosticoIA(env); // TEMPORAL
       }
       if (url.pathname === '/api/progreso' && request.method === 'POST') {
         return await guardarProgreso(request, env);
@@ -404,23 +400,6 @@ async function revisarConWorkersAI(env, config, imagen, texto, sistema, maxToken
   const salida =
     typeof r === 'string' ? r : r?.response ?? r?.result?.response ?? r?.choices?.[0]?.message?.content ?? '';
   return { texto: String(salida).trim(), motor: modelo };
-}
-
-// TEMPORAL: prueba la revisión con la IA real usando una foto de prueba (no guarda nada)
-async function diagnosticoIA(env) {
-  const config = await leerConfig(env);
-  const imagen = parsearImagen(IMAGEN_PRUEBA);
-  const ejercicio = await env.DB.prepare('SELECT * FROM ejercicios WHERE id = ?').bind('lineas-hombro').first();
-  const texto = armarPeticion(ejercicio, '', []);
-  const inicio = Date.now();
-  try {
-    const r = env.ANTHROPIC_API_KEY
-      ? await revisarConClaude(env, imagen, texto, SISTEMA, config.modelo_claude || 'claude-sonnet-5-5', 3000)
-      : await revisarConWorkersAI(env, config, imagen, texto, SISTEMA, 900);
-    return json({ ok: Boolean(r.texto), motor: r.motor, ms: Date.now() - inicio, nivel: leerCalificacion(r.texto), texto: r.texto });
-  } catch (err) {
-    return json({ ok: false, ms: Date.now() - inicio, error: err?.message || String(err) });
-  }
 }
 
 // ---------- utilidades ----------
